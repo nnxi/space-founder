@@ -1,8 +1,9 @@
 import type { SectorIndices } from "./sector";
-import type { Vec3, WarpRequest, WorldEvent } from "./planet";
+import type { WarpRequest, WorldEvent } from "./planet";
 
 export interface ClientToServerEvents {
-  "sector:update": (position: Vec3) => void;
+  "sector:join": (sector: SectorIndices) => void;
+  "sector:update": (sector: SectorIndices) => void;
   "planet:warp": (
     payload: WarpRequest,
     callback: (response: WarpAck) => void,
@@ -15,7 +16,12 @@ export interface WarpAck {
   event?: WorldEvent;
 }
 
+export interface PlayerInitPayload {
+  myPlanetId: number;
+}
+
 export interface ServerToClientEvents {
+  "player:init": (payload: PlayerInitPayload) => void;
   "sector:joined": (payload: {
     room: string;
     sector: SectorIndices;

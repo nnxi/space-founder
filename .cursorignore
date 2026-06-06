@@ -1,0 +1,31 @@
+# 1. 의존성 및 빌드 결과물 (절대 읽을 필요 없음)
+node_modules/
+dist/
+dist-ssr/
+.tsbuildinfo
+
+# 2. 로컬 환경 변수 파일 (보안 및 컨텍스트 낭비 방지)
+.env
+.env.local
+.env.*.local
+
+# 3. 로그 및 임시 파일
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# 4. IDE 및 에디터 자체 설정 파일
+.vscode/
+.idea/
+.cursor/
+
+# 5. 미디어 및 정적 자산 (이미지, 3D 모델 텍스처 등 용량 큰 파일)
+public/assets/
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.glb
+*.gltf

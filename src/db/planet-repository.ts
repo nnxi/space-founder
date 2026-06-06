@@ -39,6 +39,31 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     }
   }
 
+  async clearAll(): Promise<void> {
+    const { error } = await this.supabase
+      .from("planets")
+      .delete()
+      .gte("id", 0);
+
+    if (error) {
+      throw new Error(`Failed to clear planets table: ${error.message}`);
+    }
+  }
+
+  async bulkUpsert(rows: PlanetInsertRow[]): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+
+    const { error } = await this.supabase
+      .from("planets")
+      .upsert(rows, { onConflict: "id" });
+
+    if (error) {
+      throw new Error(`Failed to bulk upsert planets: ${error.message}`);
+    }
+  }
+
   async saveSnapshot(
     planets: ReadonlyMap<string, Planet>,
     resolveNumericId: (planetId: string) => number,

@@ -2,6 +2,7 @@ import { config } from "../config";
 import type { Planet } from "../types/planet";
 import type { Vec3 } from "../types/planet";
 import type { SectorIndices } from "../types/sector";
+import { isValidSectorIndex } from "./sector-geometry";
 
 export function getSectorIndices(
   position: Vec3,
@@ -67,6 +68,20 @@ export function groupPlanetsBySectorRoom(
   }
 
   return grouped;
+}
+
+export function isValidSectorIndices(value: unknown): value is SectorIndices {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    isValidSectorIndex(candidate.x) &&
+    isValidSectorIndex(candidate.y) &&
+    isValidSectorIndex(candidate.z)
+  );
 }
 
 export function isValidVec3(value: unknown): value is Vec3 {
