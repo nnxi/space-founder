@@ -1,0 +1,36 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript build outputs
+dist/
+out/
+build/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data (로컬 테스트용 스냅샷이나 임시 데이터)
+.pnpm-debug.log*
+
+# Environment variables (Supabase API Key, DB 패스워드 등 보안 필수)
+.env
+.env.local
+.env.*.local
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# IDE / Editor settings (Cursor 및 VS Code 설정)
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
