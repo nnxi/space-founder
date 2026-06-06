@@ -6,18 +6,13 @@ import { config } from "../config";
 import { encodeWorldUpdatePacket } from "../protocol/world-packet";
 import type { WorldEvent } from "../types/planet";
 import type { SectorIndices } from "../types/sector";
+import { getSectorRoomId } from "../utils/sector";
 import type {
   ClientToServerEvents,
   InterServerEvents,
   ServerToClientEvents,
   SocketData,
 } from "../types/socket-events";
-import {
-  filterPlanetsInSector,
-  getSectorRoomId,
-  groupPlanetsBySectorRoom,
-  isValidSectorIndices,
-} from "../utils/sector";
 
 export type SpaceSocketServer = Server<
   ClientToServerEvents,
@@ -75,6 +70,7 @@ export function attachSocketServer(
 
     socket.on("sector:join", handleSectorJoin);
     socket.on("sector:update", handleSectorJoin);
+    
     (socket as any).on("cheat:summon_me", (targetSector: SectorIndices) => {
       const myPlanetId = world.getPlanetIdByNumericId(1);
       if (!myPlanetId) return;
@@ -91,14 +87,21 @@ export function attachSocketServer(
 
     // TS 타입 검사 우회를 위해 any 캐스팅 사용
     (socket as any).on("camera:track_me", () => {
-      // 1. 내 1번 행성의 ID와 물리적 데이터 가져오기
       const myPlanetId = world.getPlanetIdByNumericId(1);
       if (!myPlanetId) return;
       
       const myPlanet = world.getPlanet(myPlanetId);
-      if (myPlanet && myPlanet.homeSector) {
-        // 2. 내 행성이 위치한 청크 룸으로 소켓 세션을 즉시 이동
-        void joinSectorRoom(socket, myPlanet.homeSector, world);
+      
+      // 정적인 homeSector 대신 현재 실시간 절대 좌표를 기반으로 실제 섹터 계산
+      if (myPlanet && myPlanet.position) {
+        const SECTOR_SIZE = 100000;
+        const realSector = {
+          x: Math.floor(myPlanet.position.x / SECTOR_SIZE),
+          y: Math.floor(myPlanet.position.y / SECTOR_SIZE),
+          z: Math.floor(myPlanet.position.z / SECTOR_SIZE),
+        };
+
+        void joinSectorRoom(socket, realSector, world);
       }
     });
 
@@ -129,12 +132,13 @@ export function broadcastSectorUpdates(
   io: SpaceSocketServer,
   world: WorldEngine,
 ): void {
-  const groupedPlanets = groupPlanetsBySectorRoom(world.getPlanets());
+  // 엔진의 공간 해시 그리드에서 룸별로 정렬된 캐시 데이터를 O(1)로 가져옴
+  const groupedPlanets = world.getAllRooms();
   const timestamp = Date.now();
   const resolveNumericId = (planetId: string) =>
     world.getNumericPlanetId(planetId);
 
-  for (const [roomId, planets] of groupedPlanets) {
+  for (const [roomId, planets] of groupedPlanets.entries()) {
     if (!roomId) continue;
     const packet = encodeWorldUpdatePacket(planets, timestamp, resolveNumericId);
     io.to(roomId).emit("world:update", packet);
@@ -184,29 +188,16 @@ function broadcastAffectedSectorUpdates(
 
   for (const roomId of affectedRooms) {
     if (!roomId) continue;
-    const sector = parseSectorFromRoomId(roomId);
     
-    if (isNaN(sector.x) || isNaN(sector.y) || isNaN(sector.z)) {
-      continue;
-    }
+    // 섹터 파싱 후 배열 풀스캔을 제거하고 엔진 캐시에서 바로 조회
+    const planets = world.getPlanetsInRoom(roomId);
+    
+    // 방에 행성이 없으면 패킷 송신 생략
+    if (planets.length === 0) continue;
 
-    const planets = filterPlanetsInSector(world.getPlanets(), sector);
     const packet = encodeWorldUpdatePacket(planets, timestamp, resolveNumericId);
     io.to(roomId).emit("world:update", packet);
   }
-}
-
-function parseSectorFromRoomId(roomId: string): SectorIndices {
-  if (!roomId || !roomId.includes("_")) {
-    return { x: 0, y: 0, z: 0 };
-  }
-  
-  const parts = roomId.split("_");
-  return {
-    x: Number(parts[1] || 0),
-    y: Number(parts[2] || 0),
-    z: Number(parts[3] || 0),
-  };
 }
 
 async function joinSectorRoom(
@@ -228,7 +219,8 @@ async function joinSectorRoom(
 
   socket.emit("sector:joined", { room: newRoom, sector });
 
-  const planets = filterPlanetsInSector(world.getPlanets(), sector);
+  // 방 입장 시 초기 데이터 역시 그리드 캐시에서 즉시 반환
+  const planets = world.getPlanetsInRoom(newRoom);
   const packet = encodeWorldUpdatePacket(
     planets,
     Date.now(),

@@ -2,49 +2,11 @@
  * Binary world:update packet encoder.
  *
  * Layout:
- *   [Header: 8 bytes] Float64 timestamp (ms since epoch, little-endian)
- *   [Body: N × 26 bytes] per planet:
- *     UInt16  id
- *     Float32 x, y, z
- *     Float32 vx, vy, vz
- *
- * Client decode example (browser):
- *
- * ```js
- * const HEADER_BYTES = 8;
- * const PLANET_BYTES = 26;
- *
- * function decodeWorldUpdatePacket(arrayBuffer) {
- *   const view = new DataView(arrayBuffer);
- *   const timestamp = view.getFloat64(0, true);
- *   const planets = [];
- *
- *   for (let offset = HEADER_BYTES; offset < arrayBuffer.byteLength; offset += PLANET_BYTES) {
- *     planets.push({
- *       id: view.getUint16(offset, true),
- *       position: {
- *         x: view.getFloat32(offset + 2, true),
- *         y: view.getFloat32(offset + 6, true),
- *         z: view.getFloat32(offset + 10, true),
- *       },
- *       velocity: {
- *         x: view.getFloat32(offset + 14, true),
- *         y: view.getFloat32(offset + 18, true),
- *         z: view.getFloat32(offset + 22, true),
- *       },
- *     });
- *   }
- *
- *   return { timestamp, planets };
- * }
- *
- * socket.on("world:update", (payload) => {
- *   const buffer = payload instanceof ArrayBuffer
- *     ? payload
- *     : payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
- *   const { timestamp, planets } = decodeWorldUpdatePacket(buffer);
- * });
- * ```
+ * [Header: 8 bytes] Float64 timestamp (ms since epoch, little-endian)
+ * [Body: N * 26 bytes] per planet:
+ * UInt16  id
+ * Float32 x, y, z
+ * Float32 vx, vy, vz
  */
 
 import type { Planet } from "../types/planet";
@@ -80,18 +42,23 @@ export function encodeWorldUpdatePacket(
 ): Buffer {
   const buffer = Buffer.alloc(getWorldPacketByteLength(planets.length));
 
-  buffer.writeDoubleLE(timestamp, WORLD_PACKET_TIMESTAMP_OFFSET);
+  // 타임스탬프 누락 시 기본값 할당
+  buffer.writeDoubleLE(timestamp || 0, WORLD_PACKET_TIMESTAMP_OFFSET);
 
   let offset = WORLD_PACKET_HEADER_BYTES;
 
   for (const planet of planets) {
-    buffer.writeUInt16LE(resolveNumericId(planet.id), offset + WORLD_PACKET_PLANET_ID_OFFSET);
-    buffer.writeFloatLE(planet.position.x, offset + WORLD_PACKET_POSITION_X_OFFSET);
-    buffer.writeFloatLE(planet.position.y, offset + WORLD_PACKET_POSITION_Y_OFFSET);
-    buffer.writeFloatLE(planet.position.z, offset + WORLD_PACKET_POSITION_Z_OFFSET);
-    buffer.writeFloatLE(planet.velocity.x, offset + WORLD_PACKET_VELOCITY_X_OFFSET);
-    buffer.writeFloatLE(planet.velocity.y, offset + WORLD_PACKET_VELOCITY_Y_OFFSET);
-    buffer.writeFloatLE(planet.velocity.z, offset + WORLD_PACKET_VELOCITY_Z_OFFSET);
+    // 숫자 변환 실패 및 좌표값 누락 시 0으로 폴백 처리하여 서버 크래시 방지
+    const numericId = resolveNumericId(planet.id) || 0;
+    
+    buffer.writeUInt16LE(numericId, offset + WORLD_PACKET_PLANET_ID_OFFSET);
+    buffer.writeFloatLE(planet.position?.x || 0, offset + WORLD_PACKET_POSITION_X_OFFSET);
+    buffer.writeFloatLE(planet.position?.y || 0, offset + WORLD_PACKET_POSITION_Y_OFFSET);
+    buffer.writeFloatLE(planet.position?.z || 0, offset + WORLD_PACKET_POSITION_Z_OFFSET);
+    buffer.writeFloatLE(planet.velocity?.x || 0, offset + WORLD_PACKET_VELOCITY_X_OFFSET);
+    buffer.writeFloatLE(planet.velocity?.y || 0, offset + WORLD_PACKET_VELOCITY_Y_OFFSET);
+    buffer.writeFloatLE(planet.velocity?.z || 0, offset + WORLD_PACKET_VELOCITY_Z_OFFSET);
+    
     offset += WORLD_PACKET_PLANET_BYTES;
   }
 
@@ -105,6 +72,7 @@ export function decodeWorldUpdatePacket(
   const timestamp = buffer.readDoubleLE(WORLD_PACKET_TIMESTAMP_OFFSET);
   const planets: DecodedPlanetSnapshot[] = [];
 
+  // 정의된 바이트 규격에 맞춰 버퍼에서 행성 데이터를 추출
   for (
     let offset = WORLD_PACKET_HEADER_BYTES;
     offset < buffer.length;
@@ -132,10 +100,10 @@ function toBuffer(source: Buffer | ArrayBuffer | Uint8Array): Buffer {
   if (Buffer.isBuffer(source)) {
     return source;
   }
-
+  
   if (source instanceof ArrayBuffer) {
     return Buffer.from(source);
   }
-
+  
   return Buffer.from(source.buffer, source.byteOffset, source.byteLength);
 }
