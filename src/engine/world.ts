@@ -43,8 +43,11 @@ export class WorldEngine {
       const copy = { ...planet };
 
       if (numericId !== 1) {
-        const sectorX = (numericId % 5) - 2;
-        const sectorY = (Math.floor(numericId / 5) % 5) - 2;
+        const gridSize = config.sectorGridSize;
+        const halfGrid = Math.floor(gridSize / 2);
+
+        const sectorX = (numericId % gridSize) - halfGrid;
+        const sectorY = (Math.floor(numericId / gridSize) % gridSize) - halfGrid;
         const sectorZ = 0;
 
         const baseX = sectorX * SECTOR_SIZE;

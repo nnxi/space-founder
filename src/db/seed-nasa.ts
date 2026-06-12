@@ -9,8 +9,7 @@ import { getSupabaseClient } from "./supabase";
 const NASA_TAP_URL =
   "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select+pl_name,ra,dec,sy_dist,pl_rade+from+ps&format=json";
 
-const PLANET_LIMIT = 150;
-const MAX_POSITION_RADIUS = config.gravityTetherRadius * 0.85;
+const MAX_POSITION_RADIUS = (config.sectorSize * config.sectorGridSize) / 2;
 const MIN_POSITION_RADIUS = 2_000;
 const VELOCITY_RANGE = 10;
 
@@ -110,7 +109,7 @@ function dedupeByNearestDistance(
 }
 
 function buildPlanetRows(records: NasaExoplanetRecord[]): PlanetInsertRow[] {
-  const uniqueRecords = dedupeByNearestDistance(records).slice(0, PLANET_LIMIT);
+  const uniqueRecords = dedupeByNearestDistance(records).slice(0, config.maxPlanets);
 
   if (uniqueRecords.length === 0) {
     throw new Error("No valid NASA exoplanet records found after filtering.");

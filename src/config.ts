@@ -19,6 +19,8 @@ export const config = {
   host: process.env.HOST ?? "0.0.0.0",
   physicsTickIntervalMs: 10_000,
   sectorSize: 100_000,
+  sectorGridSize: Number(process.env.SECTOR_GRID_SIZE) || 50,
+  maxPlanets: Number(process.env.MAX_PLANETS) || 1200,
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
   snapshotIntervalMs: Number(process.env.SNAPSHOT_INTERVAL_MS) || 5 * 60 * 1000,
   constellationCount: 12,
