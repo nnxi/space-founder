@@ -1,12 +1,13 @@
 /**
- * Binary world:update packet encoder.
+ * Binary world:update packet encoder/decoder.
  *
  * Layout:
  * [Header: 8 bytes] Float64 timestamp (ms since epoch, little-endian)
- * [Body: N * 26 bytes] per planet:
+ * [Body: N * 58 bytes] per planet:
  * UInt16  id
  * Float32 x, y, z
  * Float32 vx, vy, vz
+ * String  name (32 bytes, utf8, null-padded)
  */
 
 import type { Planet } from "../types/planet";
@@ -22,10 +23,12 @@ import {
   WORLD_PACKET_VELOCITY_X_OFFSET,
   WORLD_PACKET_VELOCITY_Y_OFFSET,
   WORLD_PACKET_VELOCITY_Z_OFFSET,
+  WORLD_PACKET_PLANET_NAME_OFFSET,
 } from "./constants";
 
 export interface DecodedPlanetSnapshot {
   id: number;
+  name: string;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
 }
@@ -35,6 +38,8 @@ export interface DecodedWorldUpdatePacket {
   planets: DecodedPlanetSnapshot[];
 }
 
+const MAX_NAME_BYTES = 32;
+
 export function encodeWorldUpdatePacket(
   planets: Planet[],
   timestamp: number,
@@ -42,13 +47,11 @@ export function encodeWorldUpdatePacket(
 ): Buffer {
   const buffer = Buffer.alloc(getWorldPacketByteLength(planets.length));
 
-  // 타임스탬프 누락 시 기본값 할당
   buffer.writeDoubleLE(timestamp || 0, WORLD_PACKET_TIMESTAMP_OFFSET);
 
   let offset = WORLD_PACKET_HEADER_BYTES;
 
   for (const planet of planets) {
-    // 숫자 변환 실패 및 좌표값 누락 시 0으로 폴백 처리하여 서버 크래시 방지
     const numericId = resolveNumericId(planet.id) || 0;
     
     buffer.writeUInt16LE(numericId, offset + WORLD_PACKET_PLANET_ID_OFFSET);
@@ -58,6 +61,13 @@ export function encodeWorldUpdatePacket(
     buffer.writeFloatLE(planet.velocity?.x || 0, offset + WORLD_PACKET_VELOCITY_X_OFFSET);
     buffer.writeFloatLE(planet.velocity?.y || 0, offset + WORLD_PACKET_VELOCITY_Y_OFFSET);
     buffer.writeFloatLE(planet.velocity?.z || 0, offset + WORLD_PACKET_VELOCITY_Z_OFFSET);
+    
+    // 행성 이름을 바이너리로 인코딩하여 추가
+    const nameBuffer = Buffer.alloc(MAX_NAME_BYTES);
+    const planetName = (planet as any).name || planet.id || `Planet-${numericId}`;
+    
+    nameBuffer.write(planetName, 0, MAX_NAME_BYTES, "utf8");
+    nameBuffer.copy(buffer, offset + WORLD_PACKET_PLANET_NAME_OFFSET);
     
     offset += WORLD_PACKET_PLANET_BYTES;
   }
@@ -72,14 +82,21 @@ export function decodeWorldUpdatePacket(
   const timestamp = buffer.readDoubleLE(WORLD_PACKET_TIMESTAMP_OFFSET);
   const planets: DecodedPlanetSnapshot[] = [];
 
-  // 정의된 바이트 규격에 맞춰 버퍼에서 행성 데이터를 추출
   for (
     let offset = WORLD_PACKET_HEADER_BYTES;
     offset < buffer.length;
     offset += WORLD_PACKET_PLANET_BYTES
   ) {
+    // 32바이트 크기의 문자열 버퍼를 추출하고 널 바이트를 제거
+    const nameBuffer = buffer.subarray(
+      offset + WORLD_PACKET_PLANET_NAME_OFFSET,
+      offset + WORLD_PACKET_PLANET_NAME_OFFSET + MAX_NAME_BYTES
+    );
+    const decodedName = nameBuffer.toString("utf8").replace(/\0/g, "");
+
     planets.push({
       id: buffer.readUInt16LE(offset + WORLD_PACKET_PLANET_ID_OFFSET),
+      name: decodedName,
       position: {
         x: buffer.readFloatLE(offset + WORLD_PACKET_POSITION_X_OFFSET),
         y: buffer.readFloatLE(offset + WORLD_PACKET_POSITION_Y_OFFSET),

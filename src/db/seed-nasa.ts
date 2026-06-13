@@ -2,8 +2,6 @@ import axios from "axios";
 import { config } from "../config";
 import { getConstellationId } from "../utils/constellation";
 import { getSectorIndices } from "../utils/sector";
-import type { PlanetInsertRow } from "../types/planet-row";
-import { PlanetRepository } from "./planet-repository";
 import { getSupabaseClient } from "./supabase";
 
 const NASA_TAP_URL =
@@ -11,7 +9,6 @@ const NASA_TAP_URL =
 
 const MAX_POSITION_RADIUS = (config.sectorSize * config.sectorGridSize) / 2;
 const MIN_POSITION_RADIUS = 2_000;
-const VELOCITY_RANGE = 10;
 
 interface NasaExoplanetRecord {
   pl_name: string;
@@ -61,10 +58,6 @@ function scalePosition(
   };
 }
 
-function randomVelocityComponent(): number {
-  return Math.random() * VELOCITY_RANGE * 2 - VELOCITY_RANGE;
-}
-
 function isValidRecord(
   record: NasaExoplanetRecord,
 ): record is NasaExoplanetRecord & {
@@ -108,7 +101,7 @@ function dedupeByNearestDistance(
   return [...byName.values()].sort((a, b) => a.sy_dist - b.sy_dist);
 }
 
-function buildPlanetRows(records: NasaExoplanetRecord[]): PlanetInsertRow[] {
+function buildPlanetRows(records: NasaExoplanetRecord[]): any[] {
   const uniqueRecords = dedupeByNearestDistance(records).slice(0, config.maxPlanets);
 
   if (uniqueRecords.length === 0) {
@@ -141,12 +134,13 @@ function buildPlanetRows(records: NasaExoplanetRecord[]): PlanetInsertRow[] {
     return {
       id: index + 1,
       name: record.pl_name,
+      earth_radius: record.pl_rade || null, // 셰이더 질감/크기 판별용 물리 데이터 추가
       x: position.x,
       y: position.y,
       z: position.z,
-      vx: randomVelocityComponent(),
-      vy: randomVelocityComponent(),
-      vz: randomVelocityComponent(),
+      vx: 0, // 배경 고정 행성이므로 물리 속도 0으로 초기화
+      vy: 0,
+      vz: 0,
       warp_authorized: false,
       home_sector_x: homeSector.x,
       home_sector_y: homeSector.y,
@@ -182,13 +176,27 @@ async function main(): Promise<void> {
     `[seed:nasa] Prepared ${rows.length} planets (scaled within ${MAX_POSITION_RADIUS.toFixed(0)} unit tether).`,
   );
 
-  const repository = new PlanetRepository(getSupabaseClient());
+  const supabase = getSupabaseClient();
 
-  console.log("[seed:nasa] Clearing existing planets...");
-  await repository.clearAll();
+  console.log("[seed:nasa] Clearing existing nasa_planets...");
+  // 기존 repository 패턴 대신 명시적으로 nasa_planets 테이블만 초기화
+  const { error: deleteError } = await supabase
+    .from("nasa_planets")
+    .delete()
+    .neq("id", 0);
+
+  if (deleteError) {
+    throw new Error(`Failed to clear nasa_planets: ${deleteError.message}`);
+  }
 
   console.log("[seed:nasa] Bulk upserting NASA planets...");
-  await repository.bulkUpsert(rows);
+  const { error: insertError } = await supabase
+    .from("nasa_planets")
+    .upsert(rows);
+
+  if (insertError) {
+    throw new Error(`Failed to upsert nasa_planets: ${insertError.message}`);
+  }
 
   console.log("[seed:nasa] Done.");
 }

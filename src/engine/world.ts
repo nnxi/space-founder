@@ -40,29 +40,26 @@ export class WorldEngine {
     this.store.clear();
 
     for (const { numericId, planet } of records) {
-      const copy = { ...planet };
+      // 1. 객체 얕은 복사로 인한 포인터 오염 방지를 위해 깊은 복사 처리
+      const copy = {
+        ...planet,
+        position: { ...planet.position },
+        velocity: { ...planet.velocity },
+        homeSector: { ...planet.homeSector }
+      };
 
-      if (numericId !== 1) {
-        const gridSize = config.sectorGridSize;
-        const halfGrid = Math.floor(gridSize / 2);
-
-        const sectorX = (numericId % gridSize) - halfGrid;
-        const sectorY = (Math.floor(numericId / gridSize) % gridSize) - halfGrid;
-        const sectorZ = 0;
-
-        const baseX = sectorX * SECTOR_SIZE;
-        const baseY = sectorY * SECTOR_SIZE;
-        const baseZ = sectorZ * SECTOR_SIZE;
-
-        copy.position = {
-          x: baseX + (numericId * 3000 % 40000) - 20000,
-          y: baseY + (numericId * 5000 % 40000) - 20000,
-          z: baseZ + (numericId * 2000 % 40000) - 20000,
-        };
-
-        const calculatedSector = getSectorIndices(copy.position);
-        copy.homeSector = calculatedSector;
-        copy.constellationId = getConstellationId(calculatedSector);
+      // 2. NASA 행성(다중 행성계) 겹침 방지를 위한 마이크로 흩뿌리기
+      if (!copy.warpAuthorized) {
+        // 자연계의 잎차례 배열에 쓰이는 황금각(Golden Angle)을 사용해 
+        // 겹치지 않고 태양계 공전 궤도처럼 예쁘게 분산시킵니다.
+        const angle = numericId * 137.508; 
+        
+        // 항성 중심으로부터 2500 ~ 5700 유닛 사이에 배치
+        const spreadRadius = 2500 + (numericId % 5) * 800; 
+        
+        copy.position.x += Math.cos(angle) * spreadRadius;
+        copy.position.y += Math.sin(angle) * spreadRadius * 0.2; // 황도면을 살짝 눕혀줌
+        copy.position.z += Math.sin(angle) * spreadRadius;
       }
 
       this.store.setPlanet(copy, numericId);

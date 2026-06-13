@@ -4,7 +4,6 @@ import type { Planet, WorldEvent } from "../types/planet";
 import type { PlanetStore } from "./store";
 import type { PlanetPersistenceAdapter } from "./world";
 
-// 매 틱마다 물리 연산을 수행하고 변경된 좌표를 그리드에 갱신
 export function processPhysicsTick(
   store: PlanetStore,
   intervalSec: number,
@@ -14,13 +13,22 @@ export function processPhysicsTick(
   const planets = store.getAllPlanets();
 
   for (const planet of planets.values()) {
+    // NASA 행성(warpAuthorized 플래그 없음)은 속도를 0으로 강제하고 위치 업데이트를 건너뜀
+    // 그리드 업데이트도 생략하여 O(1) 성능 최적화 달성
+    if (!planet.warpAuthorized) {
+      planet.velocity = { x: 0, y: 0, z: 0 };
+      continue;
+    }
+
+    // 유저 행성에 대해서만 물리 이동 연산 수행
     planet.position.x += planet.velocity.x * intervalSec;
     planet.position.y += planet.velocity.y * intervalSec;
     planet.position.z += planet.velocity.z * intervalSec;
 
     applyGravityTether(planet, intervalSec);
 
-    if (!planet.warpAuthorized && isInBlackHoleZone(planet)) {
+    // 유저 행성이 블랙홀 영역에 진입했을 경우 리버스(Rebirth) 처리
+    if (isInBlackHoleZone(planet)) {
       const rebirthEvent = executeRebirth(planet);
       events.push(rebirthEvent);
       
@@ -32,7 +40,7 @@ export function processPhysicsTick(
       }
     }
 
-    // 연산 후 공간 해시 그리드 업데이트 반영
+    // 연산이 끝난 후 공간 해시 그리드에 새로운 위치 갱신
     store.updateGrid(planet);
   }
 
