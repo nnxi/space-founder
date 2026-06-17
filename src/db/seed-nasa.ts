@@ -24,6 +24,33 @@ interface CartesianPosition {
   z: number;
 }
 
+// 문자열을 결정론적 숫자로 변환하는 해시 함수
+function getStringHash(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 33) ^ str.charCodeAt(i);
+  }
+  return Math.abs(hash);
+}
+
+// HSL 색상을 HEX 문자열로 변환하는 유틸리티 함수
+function hslToHex(h: number, s: number, l: number): string {
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  
+  const f = (t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0');
+  return `#${toHex(f(h + 1 / 3))}${toHex(f(h))}${toHex(f(h - 1 / 3))}`;
+}
+
 function degreesToRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -131,21 +158,60 @@ function buildPlanetRows(records: NasaExoplanetRecord[]): any[] {
     };
     const homeSector = getSectorIndices(position);
 
+    // 행성 이름 기반 해시 추출
+    const nameHash = getStringHash(record.pl_name);
+
+    // 좌표와 이름 해시를 믹싱하여 고유 공간 난수 생성
+    const spaceDot = Math.sin(
+      position.x * 12.9898 + 
+      position.y * 78.233 + 
+      position.z * 37.719 + 
+      (nameHash * 0.01)
+    );
+    const pseudoRandom = Math.abs(spaceDot * 43758.5453) % 1.0;
+
+    // 공간 난수를 활용한 행성 타입 결정
+    let planetType = "rocky";
+    if (record.pl_rade) {
+      if (record.pl_rade < 1.7) planetType = "rocky";
+      else if (record.pl_rade < 4.0) planetType = "icy";
+      else planetType = "gaseous";
+    } else {
+      if (pseudoRandom < 0.4) {
+        planetType = "rocky";
+      } else if (pseudoRandom < 0.7) {
+        planetType = "icy";
+      } else {
+        planetType = "gaseous";
+      }
+    }
+
+    // 공간 난수를 기반으로 무작위 색상 산출
+    const hue = (pseudoRandom * 1.618033) % 1.0; 
+    const saturation = 0.45 + ((pseudoRandom * 2.3) % 0.35); 
+    const lightness = 0.35 + ((pseudoRandom * 3.7) % 0.35);  
+    const colorHex = hslToHex(hue, saturation, lightness);
+
+    // 노이즈 시드 생성
+    const seedId = Math.floor(pseudoRandom * 50000) + 1;
+
     return {
       id: index + 1,
       name: record.pl_name,
-      earth_radius: record.pl_rade || null, // 셰이더 질감/크기 판별용 물리 데이터 추가
+      earth_radius: record.pl_rade || null,
       x: position.x,
       y: position.y,
       z: position.z,
-      vx: 0, // 배경 고정 행성이므로 물리 속도 0으로 초기화
+      vx: 0,
       vy: 0,
       vz: 0,
       warp_authorized: false,
       home_sector_x: homeSector.x,
       home_sector_y: homeSector.y,
       home_sector_z: homeSector.z,
-      constellation_id: getConstellationId(homeSector),
+      constellation_id: seedId, 
+      planet_type: planetType,
+      color_hex: colorHex,
       updated_at: updatedAt,
     };
   });
@@ -179,7 +245,6 @@ async function main(): Promise<void> {
   const supabase = getSupabaseClient();
 
   console.log("[seed:nasa] Clearing existing nasa_planets...");
-  // 기존 repository 패턴 대신 명시적으로 nasa_planets 테이블만 초기화
   const { error: deleteError } = await supabase
     .from("nasa_planets")
     .delete()

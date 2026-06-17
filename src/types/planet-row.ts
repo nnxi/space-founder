@@ -12,6 +12,8 @@ export interface PlanetRow {
   home_sector_y: number;
   home_sector_z: number;
   constellation_id: number;
+  planet_type: string;
+  color_hex: string;
   updated_at: string;
 }
 
@@ -29,5 +31,7 @@ export interface PlanetInsertRow {
   home_sector_y: number;
   home_sector_z: number;
   constellation_id: number;
+  planet_type: string;
+  color_hex: string;
   updated_at?: string;
 }

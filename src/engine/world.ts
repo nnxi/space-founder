@@ -36,29 +36,32 @@ export class WorldEngine {
     this.persistence = adapter;
   }
 
+  // world.ts 내의 hydrate 메서드 수정
   hydrate(records: HydratablePlanet[]): void {
     this.store.clear();
 
     for (const { numericId, planet } of records) {
-      // 1. 객체 얕은 복사로 인한 포인터 오염 방지를 위해 깊은 복사 처리
-      const copy = {
+      // 1. 안전하게 깊은 복사 처리
+      const copy: Planet = {
         ...planet,
         position: { ...planet.position },
         velocity: { ...planet.velocity },
-        homeSector: { ...planet.homeSector }
+        // homeSector가 존재할 때만 복사하고, 없으면 아예 undefined 처리
+        homeSector: planet.homeSector 
+          ? { x: planet.homeSector.x, y: planet.homeSector.y, z: planet.homeSector.z }
+          : undefined
       };
 
-      // 2. NASA 행성(다중 행성계) 겹침 방지를 위한 마이크로 흩뿌리기
+      // 2. NASA 행성(다중 행성 배치 로직) 처리
       if (!copy.warpAuthorized) {
-        // 자연계의 잎차례 배열에 쓰이는 황금각(Golden Angle)을 사용해 
-        // 겹치지 않고 태양계 공전 궤도처럼 예쁘게 분산시킵니다.
-        const angle = numericId * 137.508; 
+        // 자연계의 잎차례 배열에서 착안한 배치 공식 적용
+        const angle = numericId * 137.5 * (Math.PI / 180);
         
-        // 항성 중심으로부터 2500 ~ 5700 유닛 사이에 배치
-        const spreadRadius = 2500 + (numericId % 5) * 800; 
-        
+        // 항성 중심으로부터 25000단위 떨어진 곳부터 넓게 퍼지도록 설정
+        const spreadRadius = 25000 + numericId * 1500;
+
         copy.position.x += Math.cos(angle) * spreadRadius;
-        copy.position.y += Math.sin(angle) * spreadRadius * 0.2; // 황도면을 살짝 눕혀줌
+        copy.position.y += (Math.random() - 0.5) * 2000; // 수직 분산 약간 부여
         copy.position.z += Math.sin(angle) * spreadRadius;
       }
 

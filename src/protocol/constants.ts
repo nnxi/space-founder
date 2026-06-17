@@ -1,7 +1,7 @@
 /** World update packet layout (little-endian). */
 
 export const WORLD_PACKET_HEADER_BYTES = 8;
-export const WORLD_PACKET_PLANET_BYTES = 58;
+export const WORLD_PACKET_PLANET_BYTES = 67; // 58에서 67로 증가
 
 export const WORLD_PACKET_TIMESTAMP_OFFSET = 0;
 
@@ -14,6 +14,10 @@ export const WORLD_PACKET_VELOCITY_Y_OFFSET = 18;
 export const WORLD_PACKET_VELOCITY_Z_OFFSET = 22;
 
 export const WORLD_PACKET_PLANET_NAME_OFFSET = 26;
+
+export const WORLD_PACKET_CONSTELLATION_ID_OFFSET = 58;
+export const WORLD_PACKET_COLOR_HEX_OFFSET = 62;
+export const WORLD_PACKET_PLANET_TYPE_OFFSET = 66;
 
 export function getWorldPacketByteLength(planetCount: number): number {
   return WORLD_PACKET_HEADER_BYTES + planetCount * WORLD_PACKET_PLANET_BYTES;
