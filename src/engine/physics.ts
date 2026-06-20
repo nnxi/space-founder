@@ -1,5 +1,4 @@
 import { applyGravityTether } from "./gravity";
-import { executeRebirth, isInBlackHoleZone } from "./black-hole";
 import type { Planet, WorldEvent } from "../types/planet";
 import type { PlanetStore } from "./store";
 import type { PlanetPersistenceAdapter } from "./world";
@@ -26,19 +25,6 @@ export function processPhysicsTick(
     planet.position.z += planet.velocity.z * intervalSec;
 
     applyGravityTether(planet, intervalSec);
-
-    // 유저 행성이 블랙홀 영역에 진입했을 경우 리버스(Rebirth) 처리
-    if (isInBlackHoleZone(planet)) {
-      const rebirthEvent = executeRebirth(planet);
-      events.push(rebirthEvent);
-      
-      if (persistence) {
-        const numericId = store.getNumericId(planet.id);
-        if (numericId !== undefined) {
-          persistence.persistPlanet(planet, numericId);
-        }
-      }
-    }
 
     // 연산이 끝난 후 공간 해시 그리드에 새로운 위치 갱신
     store.updateGrid(planet);

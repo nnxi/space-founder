@@ -123,7 +123,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     const { data, error } = await this.supabase
       .from("user_planets")
       // 💡 select 절에 planet_type, color_hex 추가
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at")
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized")
       .order("id", { ascending: true });
 
     if (error) {

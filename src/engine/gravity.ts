@@ -10,6 +10,8 @@ export function applyGravityTether(
     return;
   }
 
+  if (!planet.homeSector) return;
+
   const origin = getSectorOrigin(planet.homeSector);
   const dx = planet.position.x - origin.x;
   const dy = planet.position.y - origin.y;

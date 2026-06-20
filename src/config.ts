@@ -27,7 +27,6 @@ export const config = {
   gravityTetherRadius: 35_000,
   gravityMaxDistance: 45_000,
   gravityPullStrength: 2.5,
-  blackHoleShellDepth: 5_000,
   warpBurstVelocity: 120,
   supabase: {
     url: normalizeSupabaseUrl(requiredEnv("SUPABASE_URL")),

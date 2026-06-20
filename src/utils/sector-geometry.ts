@@ -23,7 +23,7 @@ export function getLocalSectorPosition(
 }
 
 export function randomPositionInSector(sector: SectorIndices): Vec3 {
-  const padding = config.blackHoleShellDepth * 2;
+  const padding = 5000;
   const innerSize = config.sectorSize - padding * 2;
 
   return {

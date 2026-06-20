@@ -49,7 +49,8 @@ export function attachSocketServer(
     }
   });
 
-  // [핵심] 소켓 미들웨어: 연결 시점에서의 Supabase JWT 토큰 검증 및 유저 행성 ID 매핑
+  // 소켓 미들웨어: 연결 및 재연결 시마다 실행
+  // JWT 토큰 검증 및 행성 ID 세션 매핑
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
@@ -65,7 +66,7 @@ export function attachSocketServer(
         return next(new Error("Invalid authentication token."));
       }
 
-      // 해당 유저가 생성한 행성 ID 조회
+      // DB에서 행성 ID 조회 및 소켓 세션 데이터에 주입
       const { data: planetRecord, error: dbError } = await supabase
         .from("user_planets")
         .select("id")
@@ -73,8 +74,7 @@ export function attachSocketServer(
         .single();
 
       if (dbError || !planetRecord) {
-        // 행성이 아직 없는 신규 유저 등은 관전자(Spectator) 모드로 null 처리
-        socket.data.myPlanetId = null;
+        socket.data.myPlanetId = null; // 관전자(Spectator) 모드
       } else {
         socket.data.myPlanetId = planetRecord.id;
       }
@@ -93,9 +93,27 @@ export function attachSocketServer(
 
     socket.data.sectorRoom = null;
 
-    // 관전자 모드가 아닐 경우에만 본인 행성 ID를 내려줌
+    // 연결 시 서버 기준의 최신 행성 위치를 프론트엔드로 전달
     if (myPlanetNumericId !== null && myPlanetNumericId !== undefined) {
-      socket.emit("player:init", { myPlanetId: myPlanetNumericId });
+      let currentSector = { x: 0, y: 0, z: 0 };
+      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
+      
+      if (myPlanetIdString) {
+        const myPlanet = world.getPlanet(myPlanetIdString);
+        if (myPlanet && myPlanet.position) {
+          const SECTOR_SIZE = 100000;
+          currentSector = {
+            x: Math.floor(myPlanet.position.x / SECTOR_SIZE),
+            y: Math.floor(myPlanet.position.y / SECTOR_SIZE),
+            z: Math.floor(myPlanet.position.z / SECTOR_SIZE),
+          };
+        }
+      }
+
+      socket.emit("player:init", { 
+        myPlanetId: myPlanetNumericId,
+        currentSector: currentSector
+      });
     }
 
     const handleSectorJoin = (sector: SectorIndices): void => {
@@ -132,22 +150,17 @@ export function attachSocketServer(
     });
 
     (socket as any).on("camera:track_me", (payload: { planetId?: number } | undefined, callback: unknown) => {
-      // payload.planetId가 없으면 내 행성을 추적하되, 관전자면 추적을 거부함
       const targetNumericId = payload?.planetId ?? myPlanetNumericId;
       
       if (!targetNumericId) {
-        if (typeof callback === "function") {
-          callback({ ok: false, error: "No target planet specified" });
-        }
+        if (typeof callback === "function") callback({ ok: false, error: "No target planet specified" });
         return;
       }
       
       const targetPlanetId = world.getPlanetIdByNumericId(targetNumericId);
       
       if (!targetPlanetId) {
-        if (typeof callback === "function") {
-          callback({ ok: false, error: "Planet not found in engine" });
-        }
+        if (typeof callback === "function") callback({ ok: false, error: "Planet not found in engine" });
         return;
       }
       
@@ -167,9 +180,7 @@ export function attachSocketServer(
           callback({ ok: true, position: targetPlanet.position });
         }
       } else {
-        if (typeof callback === "function") {
-          callback({ ok: false, error: "Planet position unavailable" });
-        }
+        if (typeof callback === "function") callback({ ok: false, error: "Planet position unavailable" });
       }
     });
 

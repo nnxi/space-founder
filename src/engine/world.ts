@@ -1,5 +1,4 @@
 import { config } from "../config";
-import { buildWarpVelocity } from "./black-hole";
 import { PlanetStore } from "./store";
 import { processPhysicsTick } from "./physics";
 import type { Planet, WarpRequest, WorldEvent } from "../types/planet";
@@ -46,7 +45,6 @@ export class WorldEngine {
         ...planet,
         position: { ...planet.position },
         velocity: { ...planet.velocity },
-        // homeSector가 존재할 때만 복사하고, 없으면 아예 undefined 처리
         homeSector: planet.homeSector 
           ? { x: planet.homeSector.x, y: planet.homeSector.y, z: planet.homeSector.z }
           : undefined
@@ -146,7 +144,6 @@ export class WorldEngine {
     if (!planet) throw new Error(`Planet not found: ${planetId}`);
 
     const sector = getSectorIndices(planet.position);
-    planet.velocity = buildWarpVelocity(sector, sector);
     planet.warpAuthorized = true;
 
     this.persistPlanet(planet);
@@ -171,7 +168,6 @@ export class WorldEngine {
     };
 
     planet.position = randomPositionInSector(targetSector);
-    planet.velocity = buildWarpVelocity(fromSector, targetSector);
     planet.homeSector = { ...targetSector };
     planet.constellationId = getConstellationId(targetSector);
     planet.warpAuthorized = true;

@@ -1,12 +1,26 @@
 import type { SectorIndices } from "./sector";
 import type { WarpRequest, WorldEvent } from "./planet";
 
+// 새로 추가된 카메라 트래킹 응답 타입
+export interface TrackMeAck {
+  ok: boolean;
+  error?: string;
+  position?: { x: number; y: number; z: number };
+}
+
 export interface ClientToServerEvents {
   "sector:join": (sector: SectorIndices) => void;
   "sector:update": (sector: SectorIndices) => void;
   "planet:warp": (
     payload: WarpRequest,
     callback: (response: WarpAck) => void,
+  ) => void;
+  
+  // 💡 누락되었던 프론트엔드 호출 이벤트 추가
+  "cheat:summon_me": (targetSector: SectorIndices) => void;
+  "camera:track_me": (
+    payload?: { planetId?: number },
+    callback?: (response: TrackMeAck) => void
   ) => void;
 }
 
@@ -18,6 +32,11 @@ export interface WarpAck {
 
 export interface PlayerInitPayload {
   myPlanetId: number;
+  currentSector?: {
+    x: number;
+    y: number;
+    z: number;
+  };
 }
 
 export interface ServerToClientEvents {
@@ -36,4 +55,6 @@ export interface InterServerEvents {
 
 export interface SocketData {
   sectorRoom: string | null;
+  // 💡 기존 index.ts에서 강제로 병합하던 유저 세션 데이터 추가
+  myPlanetId?: number | null; 
 }
