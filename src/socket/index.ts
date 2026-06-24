@@ -74,7 +74,7 @@ export function attachSocketServer(
         .single();
 
       if (dbError || !planetRecord) {
-        socket.data.myPlanetId = null; // 관전자(Spectator) 모드
+        socket.data.myPlanetId = null; // 관전자 모드
       } else {
         socket.data.myPlanetId = planetRecord.id;
       }
@@ -319,9 +319,31 @@ async function joinSectorRoom(
     socket.data.sectorRoom = newRoom;
   }
 
-  socket.emit("sector:joined", { room: newRoom, sector });
-
   const planets = world.getPlanetsInRoom(newRoom);
+
+  // 정적 데이터를 추출하여 sector:joined 패킷에 함께 전송
+  const staticPlanets = planets.map((planet) => {
+    const p = planet as any;
+    const numericId = world.getNumericPlanetId(planet.id) || 0;
+    
+    return {
+      id: numericId,
+      name: p.name || planet.id || `Planet-${numericId}`,
+      colorHex: p.colorHex || "#ffffff",
+      planetType: p.planetType || "rocky",
+      constellationId: Number(p.constellationId) || numericId,
+      // 추후 위성 데이터가 추가될 배열 공간
+      satellites: p.satellites || [] 
+    };
+  });
+
+  socket.emit("sector:joined", { 
+    room: newRoom, 
+    sector,
+    staticPlanets 
+  });
+
+  // 구역 입장 직후 동적 패킷(좌표, 속도) 최초 1회 전송
   const packet = encodeWorldUpdatePacket(
     planets,
     Date.now(),

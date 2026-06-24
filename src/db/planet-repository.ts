@@ -2,7 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorldEngine, PlanetPersistenceAdapter } from "../engine/world";
 import type { Planet } from "../types/planet";
 
-// DB 스키마에 맞춘 로우 타입 정의
+// 위성 데이터 로우 타입 정의
+export interface SatelliteRow {
+  id: number;
+  orbit_radius: number;
+  orbit_speed: number;
+  orbit_inclination: number;
+}
+
 export interface NasaPlanetRow {
   id: number;
   name: string;
@@ -17,8 +24,8 @@ export interface NasaPlanetRow {
   home_sector_y: number;
   home_sector_z: number;
   constellation_id: number;
-  planet_type: string; // 💡 신규 컬럼 반영
-  color_hex: string;   // 💡 신규 컬럼 반영
+  planet_type: string;
+  color_hex: string;
 }
 
 export interface UserPlanetRow {
@@ -32,15 +39,15 @@ export interface UserPlanetRow {
   vy: number;
   vz: number;
   constellation_id: number;
-  planet_type: string; // 💡 신규 컬럼 반영
-  color_hex: string;   // 💡 신규 컬럼 반영
+  planet_type: string;
+  color_hex: string;
   created_at: string;
+  planet_satellites?: SatelliteRow[]; // JOIN된 위성 배열
 }
 
 export class PlanetRepository implements PlanetPersistenceAdapter {
   constructor(private readonly supabase: SupabaseClient) {}
 
-  // 서버 부트스트랩 시 두 테이블의 데이터를 모두 불러와 엔진에 적재
   async bootstrapWorld(world: WorldEngine): Promise<void> {
     const [nasaRows, userRows] = await Promise.all([
       this.fetchNasaPlanets(),
@@ -55,7 +62,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     world.hydrate(hydratablePlanets);
   }
 
-  // 개별 행성 저장 시 유저 행성만 필터링하여 처리
   persistPlanet(planet: Planet, numericId: number): void {
     if (!planet.warpAuthorized) {
       return; 
@@ -77,7 +83,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     }
   }
 
-  // 물리 틱마다 실행되는 스냅샷 저장 (유저 행성만 추출하여 벌크 업데이트)
   async saveSnapshot(
     planets: ReadonlyMap<string, Planet>,
     resolveNumericId: (planetId: string) => number,
@@ -108,7 +113,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchNasaPlanets(): Promise<NasaPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("nasa_planets")
-      // 💡 select 절에 planet_type, color_hex 추가
       .select("id, name, earth_radius, x, y, z, vx, vy, vz, home_sector_x, home_sector_y, home_sector_z, constellation_id, planet_type, color_hex")
       .order("id", { ascending: true });
 
@@ -122,8 +126,8 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("user_planets")
-      // 💡 select 절에 planet_type, color_hex 추가
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized")
+      // user_planets 조회 시 planet_satellites 테이블 JOIN
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination)")
       .order("id", { ascending: true });
 
     if (error) {
@@ -148,8 +152,8 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
         z: row.home_sector_z,
       },
       constellationId: row.constellation_id,
-      planetType: row.planet_type as any, // 💡 엔진 Planet 인스턴스 속성 매핑
-      colorHex: row.color_hex,           // 💡 엔진 Planet 인스턴스 속성 매핑
+      planetType: row.planet_type as any,
+      colorHex: row.color_hex,
       radius: row.earth_radius ?? 1.0,
     },
   };
@@ -164,10 +168,11 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       velocity: { x: row.vx, y: row.vy, z: row.vz },
       warpAuthorized: true,
       constellationId: row.constellation_id,
-      planetType: row.planet_type as any, // 💡 엔진 Planet 인스턴스 속성 매핑
-      colorHex: row.color_hex,           // 💡 엔진 Planet 인스턴스 속성 매핑
+      planetType: row.planet_type as any,
+      colorHex: row.color_hex,
       radius: 1.0,
-    },
+      satellites: row.planet_satellites ?? [],
+    } as any,
   };
 }
 
@@ -183,7 +188,7 @@ function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetR
     vy: planet.velocity.y,
     vz: planet.velocity.z,
     constellation_id: planet.constellationId,
-    planet_type: p.planetType || "rocky", // 💡 디비 저장 시 유저 데이터 인계 보장
-    color_hex: p.colorHex || "#ffffff",   // 💡 디비 저장 시 유저 데이터 인계 보장
+    planet_type: p.planetType || "rocky",
+    color_hex: p.colorHex || "#ffffff",
   };
 }

@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { registerWarpRoutes } from "./api/warp";
 import { registerPlanetRoutes } from "./api/planets";
+import { registerSatelliteRoutes } from "./api/satellites";
 import type { WorldEngine } from "./engine/world";
 import { config } from "./config";
 import {
@@ -36,8 +37,11 @@ export async function createServer(world: WorldEngine): Promise<AppContext> {
     if (io) publishWorldEvents(io, world, [event]);
   });
 
-  // 💡 나만의 행성 생성 HTTP API 라우트 등록
+  // 행성 생성 HTTP API 라우트 등록
   registerPlanetRoutes(app, world);
+
+  // 위성 생성 HTTP API 라우트 등록
+  registerSatelliteRoutes(app, world);
 
   // Fastify HTTP 서버 가동
   await app.listen({ port: config.port, host: config.host });

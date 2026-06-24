@@ -16,6 +16,12 @@ export class PlanetStore {
   }
 
   setPlanet(planet: Planet, numericId: number): void {
+    const p = planet as any;
+    // 위성 데이터 배열 속성이 없을 경우 안정성을 위해 빈 배열로 초기화
+    if (!p.satellites) {
+      p.satellites = [];
+    }
+
     this.planets.set(planet.id, planet);
     this.idToNumeric.set(planet.id, numericId);
     this.numericToId.set(numericId, planet.id);

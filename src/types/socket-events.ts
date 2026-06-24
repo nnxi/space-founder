@@ -44,6 +44,14 @@ export interface ServerToClientEvents {
   "sector:joined": (payload: {
     room: string;
     sector: SectorIndices;
+    staticPlanets: {
+      id: number;
+      name: string;
+      colorHex: string;
+      planetType: string;
+      constellationId: number;
+      satellites: any[]; // 나중에 위성 타입이 구체화되면 변경할 수 있도록 any[] 처리
+    }[];
   }) => void;
   "world:update": (payload: Buffer) => void;
   "world:event": (payload: WorldEvent) => void;

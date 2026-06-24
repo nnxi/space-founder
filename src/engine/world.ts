@@ -40,26 +40,27 @@ export class WorldEngine {
     this.store.clear();
 
     for (const { numericId, planet } of records) {
-      // 1. 안전하게 깊은 복사 처리
+      const p = planet as any;
+      
+      // 1. 안전하게 깊은 복사 처리 (위성 배열 포함)
       const copy: Planet = {
         ...planet,
         position: { ...planet.position },
         velocity: { ...planet.velocity },
         homeSector: planet.homeSector 
           ? { x: planet.homeSector.x, y: planet.homeSector.y, z: planet.homeSector.z }
-          : undefined
-      };
+          : undefined,
+        // 주입된 위성 데이터가 있다면 안전하게 배열 복사
+        satellites: p.satellites ? [...p.satellites] : [] 
+      } as Planet;
 
       // 2. NASA 행성(다중 행성 배치 로직) 처리
       if (!copy.warpAuthorized) {
-        // 자연계의 잎차례 배열에서 착안한 배치 공식 적용
         const angle = numericId * 137.5 * (Math.PI / 180);
-        
-        // 항성 중심으로부터 25000단위 떨어진 곳부터 넓게 퍼지도록 설정
         const spreadRadius = 25000 + numericId * 1500;
 
         copy.position.x += Math.cos(angle) * spreadRadius;
-        copy.position.y += (Math.random() - 0.5) * 2000; // 수직 분산 약간 부여
+        copy.position.y += (Math.random() - 0.5) * 2000;
         copy.position.z += Math.sin(angle) * spreadRadius;
       }
 
