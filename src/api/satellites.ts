@@ -38,7 +38,7 @@ export function registerSatelliteRoutes(app: FastifyInstance, world: WorldEngine
         return reply.status(403).send({ error: "Not authorized to add satellites to this planet" });
       }
 
-      const orbitRadius = 250 + Math.random() * 350;
+      const orbitRadius = 250 + Math.random() * 500;
       const orbitSpeed = 0.1 + Math.random() * 0.1;
       const orbitInclination = (Math.random() - 0.5) * 0.8;
 
