@@ -1,6 +1,5 @@
 import { Server, type Socket } from "socket.io";
 import type { Server as HttpServer } from "node:http";
-import { executeWarp } from "../api/warp";
 import type { WorldEngine } from "../engine/world";
 import { config } from "../config";
 import { encodeWorldUpdatePacket } from "../protocol/world-packet";
@@ -49,8 +48,7 @@ export function attachSocketServer(
     }
   });
 
-  // 소켓 미들웨어: 연결 및 재연결 시마다 실행
-  // JWT 토큰 검증 및 행성 ID 세션 매핑
+  // 소켓 미들웨어: JWT 토큰 검증 및 행성 ID 세션 매핑
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
@@ -66,7 +64,6 @@ export function attachSocketServer(
         return next(new Error("Invalid authentication token."));
       }
 
-      // DB에서 행성 ID 조회 및 소켓 세션 데이터에 주입
       const { data: planetRecord, error: dbError } = await supabase
         .from("user_planets")
         .select("id")
@@ -74,7 +71,7 @@ export function attachSocketServer(
         .single();
 
       if (dbError || !planetRecord) {
-        socket.data.myPlanetId = null; // 관전자 모드
+        socket.data.myPlanetId = null; 
       } else {
         socket.data.myPlanetId = planetRecord.id;
       }
@@ -93,7 +90,6 @@ export function attachSocketServer(
 
     socket.data.sectorRoom = null;
 
-    // 연결 시 서버 기준의 최신 행성 위치를 프론트엔드로 전달
     if (myPlanetNumericId !== null && myPlanetNumericId !== undefined) {
       let currentSector = { x: 0, y: 0, z: 0 };
       const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
@@ -130,96 +126,8 @@ export function attachSocketServer(
       void joinSectorRoom(socket, normalizedSector, world);
     };
 
-    socket.on("sector:join", handleSectorJoin);
+    // 💡 프론트엔드에서 실제로 사용하는 이벤트만 남김
     socket.on("sector:update", handleSectorJoin);
-    
-    (socket as any).on("cheat:summon_me", (targetSector: SectorIndices) => {
-      if (!myPlanetNumericId) return;
-
-      const myPlanetId = world.getPlanetIdByNumericId(myPlanetNumericId);
-      if (!myPlanetId) return;
-
-      const event = world.warpPlanet({
-        planetId: myPlanetId,
-        targetSectorX: targetSector.x,
-        targetSectorY: targetSector.y,
-        targetSectorZ: targetSector.z,
-      });
-
-      publishWorldEvents(io, world, [event]);
-    });
-
-    (socket as any).on("camera:track_me", (payload: { planetId?: number } | undefined, callback: unknown) => {
-      const targetNumericId = payload?.planetId ?? myPlanetNumericId;
-      
-      if (!targetNumericId) {
-        if (typeof callback === "function") callback({ ok: false, error: "No target planet specified" });
-        return;
-      }
-      
-      const targetPlanetId = world.getPlanetIdByNumericId(targetNumericId);
-      
-      if (!targetPlanetId) {
-        if (typeof callback === "function") callback({ ok: false, error: "Planet not found in engine" });
-        return;
-      }
-      
-      const targetPlanet = world.getPlanet(targetPlanetId);
-      
-      if (targetPlanet && targetPlanet.position) {
-        const SECTOR_SIZE = 100000;
-        const realSector = {
-          x: Math.floor(targetPlanet.position.x / SECTOR_SIZE),
-          y: Math.floor(targetPlanet.position.y / SECTOR_SIZE),
-          z: Math.floor(targetPlanet.position.z / SECTOR_SIZE),
-        };
-
-        void joinSectorRoom(socket, realSector, world);
-
-        if (typeof callback === "function") {
-          callback({ ok: true, position: targetPlanet.position });
-        }
-      } else {
-        if (typeof callback === "function") callback({ ok: false, error: "Planet position unavailable" });
-      }
-    });
-
-    socket.on("planet:warp", (payload, callback) => {
-      if (!myPlanetNumericId) {
-         if (typeof callback === "function") callback({ ok: false, error: "Spectators cannot warp" });
-         return;
-      }
-
-      const myPlanetId = world.getPlanetIdByNumericId(myPlanetNumericId);
-      if (!myPlanetId) {
-        if (typeof callback === "function") callback({ ok: false, error: "Player planet not found in engine" });
-        return;
-      }
-
-      const p = payload as any;
-      const SECTOR_SIZE = 100000;
-
-      const targetSectorX = Math.floor(Number(p.x || 0) / SECTOR_SIZE);
-      const targetSectorY = Math.floor(Number(p.y || 0) / SECTOR_SIZE);
-      const targetSectorZ = Math.floor(Number(p.z || 0) / SECTOR_SIZE);
-
-      const validPayload = {
-        planetId: myPlanetId,
-        targetSectorX,
-        targetSectorY,
-        targetSectorZ,
-      };
-
-      const ack = executeWarp(world, validPayload);
-
-      if (ack.ok) {
-        publishWorldEvents(io, world, [ack.event]);
-      }
-
-      if (typeof callback === "function") {
-        callback(ack);
-      }
-    });
   });
 
   return io;
@@ -321,7 +229,7 @@ async function joinSectorRoom(
 
   const planets = world.getPlanetsInRoom(newRoom);
 
-  // 정적 데이터를 추출하여 sector:joined 패킷에 함께 전송
+  // 💡 정적 데이터를 추출하여 sector:joined 패킷에 함께 전송
   const staticPlanets = planets.map((planet) => {
     const p = planet as any;
     const numericId = world.getNumericPlanetId(planet.id) || 0;
@@ -329,10 +237,10 @@ async function joinSectorRoom(
     return {
       id: numericId,
       name: p.name || planet.id || `Planet-${numericId}`,
+      username: p.username || "Space Explorer",
       colorHex: p.colorHex || "#ffffff",
       planetType: p.planetType || "rocky",
       constellationId: Number(p.constellationId) || numericId,
-      // 추후 위성 데이터가 추가될 배열 공간
       satellites: p.satellites || [] 
     };
   });
@@ -343,7 +251,6 @@ async function joinSectorRoom(
     staticPlanets 
   });
 
-  // 구역 입장 직후 동적 패킷(좌표, 속도) 최초 1회 전송
   const packet = encodeWorldUpdatePacket(
     planets,
     Date.now(),

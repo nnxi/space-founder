@@ -43,13 +43,12 @@ export function registerPlanetRoutes(app: FastifyInstance, world: WorldEngine): 
       }
       const token = authHeader.split(" ")[1];
 
-      // 프론트엔드에서 보내는 디자인 메타데이터 속성 추가 추출
       const { name, constellationId, planetType, colorHex } = request.body as { 
         name: string; 
         constellationId: number;
         planetType: "rocky" | "gaseous" | "icy";
         colorHex: string;
-      };
+      };  
       
       if (!name) return reply.status(400).send({ error: "Missing required fields" });
 
@@ -58,14 +57,12 @@ export function registerPlanetRoutes(app: FastifyInstance, world: WorldEngine): 
 
       if (authError || !user) return reply.status(401).send({ error: "Unauthorized token" });
 
-      // 초기 위치 계산
       const radius = 5000 + Math.random() * 15000;
       const theta = Math.random() * Math.PI * 2;
       const x = radius * Math.cos(theta);
       const y = (Math.random() - 0.5) * 2000;
       const z = radius * Math.sin(theta);
 
-      // 중심(0,0,0)을 공전하기 위한 접선 벡터 및 속도 계산
       const length = Math.sqrt(x * x + z * z);
       const tangentX = -z / length;
       const tangentZ = x / length;
@@ -77,7 +74,16 @@ export function registerPlanetRoutes(app: FastifyInstance, world: WorldEngine): 
       const vy = (Math.random() - 0.5) * 10;
       const vz = tangentZ * orbitSpeed;
 
-      // DB 저장 시 디자인 메타데이터 매핑
+      // 행성 주인 유저네임 뽑아오기 
+      const { data: profile, error: profError } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      const currentUsername = profile?.username || "Space Founder";
+
+      // 1. user_planets 테이블에 행성 데이터 저장
       const { data: newPlanet, error: dbError } = await supabase
         .from("user_planets")
         .insert({
@@ -93,7 +99,16 @@ export function registerPlanetRoutes(app: FastifyInstance, world: WorldEngine): 
 
       if (dbError || !newPlanet) throw new Error(`Database failed: ${dbError?.message}`);
 
-      // 실시간 물리 엔진 메모리 적재 시 디자인 메타데이터 매핑
+      // 2. profiles 테이블의 has_planet 상태를 true로 업데이트
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ has_planet: true })
+        .eq("id", user.id);
+
+      if (profileError) {
+        throw new Error(`Profile update failed: ${profileError.message}`);
+      }
+
       world.hydrate([{
         numericId: newPlanet.id,
         planet: {
@@ -105,6 +120,7 @@ export function registerPlanetRoutes(app: FastifyInstance, world: WorldEngine): 
           planetType: planetType || "rocky",
           colorHex: colorHex || "#ffffff",
           radius: 1.0,
+          username: currentUsername
         },
       }]);
 

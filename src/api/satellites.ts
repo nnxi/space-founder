@@ -27,6 +27,22 @@ export function registerSatelliteRoutes(app: FastifyInstance, world: WorldEngine
         return reply.status(401).send({ error: "Unauthorized token" });
       }
 
+      // 1. [추가] profiles 테이블에서 현재 위성 개수 검사
+      const { data: profileRecord, error: profileGetError } = await supabase
+        .from("profiles")
+        .select("satellite_count")
+        .eq("id", user.id)
+        .single();
+
+      if (profileGetError || !profileRecord) {
+        return reply.status(404).send({ error: "User profile not found" });
+      }
+
+      if (profileRecord.satellite_count >= 5) {
+        return reply.status(400).send({ error: "Satellite limit reached. Maximum 5 satellites allowed." });
+      }
+
+      // 2. 내 행성이 맞는지 권한 검사
       const { data: planetRecord, error: planetError } = await supabase
         .from("user_planets")
         .select("id")
@@ -42,6 +58,7 @@ export function registerSatelliteRoutes(app: FastifyInstance, world: WorldEngine
       const orbitSpeed = 0.1 + Math.random() * 0.1;
       const orbitInclination = (Math.random() - 0.5) * 0.8;
 
+      // 3. planet_satellites 테이블에 데이터 추가
       const { data: newSatellite, error: dbError } = await supabase
         .from("planet_satellites")
         .insert({
@@ -57,7 +74,17 @@ export function registerSatelliteRoutes(app: FastifyInstance, world: WorldEngine
         throw new Error(`Database failed: ${dbError?.message}`);
       }
 
-      // 4. 실시간 물리 엔진 메모리(RAM)에 즉시 주입
+      // 4. [추가] profiles 테이블의 satellite_count 컬럼 +1 업데이트
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({ satellite_count: profileRecord.satellite_count + 1 })
+        .eq("id", user.id);
+
+      if (profileUpdateError) {
+        throw new Error(`Failed to increment satellite count: ${profileUpdateError.message}`);
+      }
+
+      // 5. 실시간 물리 엔진 메모리(RAM)에 즉시 주입
       const enginePlanetId = world.getPlanetIdByNumericId(targetPlanetId);
       
       if (enginePlanetId) {

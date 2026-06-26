@@ -19,6 +19,7 @@ export interface Planet {
   constellationId: number;
   planetType: PlanetType;
   colorHex: string;
+  username: string;
 }
 
 export interface WarpRequest {
