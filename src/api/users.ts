@@ -3,7 +3,7 @@ import { getSupabaseClient } from "../db/supabase";
 
 export function registerUserRoutes(app: FastifyInstance): void {
 
-  // 현재 로그인한 유저의 프로필 정보 조회
+  // 현재 로그인한 유저의 프로필 정보 조회하기
   app.get("/api/users/me", async (request, reply) => {
     try {
       const authHeader = request.headers.authorization;
