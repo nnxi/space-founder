@@ -1,9 +1,8 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { registerWarpRoutes } from "./api/warp";
-import { registerPlanetRoutes } from "./api/planets";
-import { registerSatelliteRoutes } from "./api/satellites";
-import { registerUserRoutes } from "./api/users"
+import { registerPlanetRoutes } from "./api/planets/planets.routes";
+import { registerSatelliteRoutes } from "./api/satellites/satellites.routes";
+import { registerUserRoutes } from "./api/users/users.routes"
 import type { WorldEngine } from "./engine/world";
 import { config } from "./config";
 import {
@@ -32,11 +31,6 @@ export async function createServer(world: WorldEngine): Promise<AppContext> {
     status: "ok",
     planetCount: world.getPlanets().size,
   }));
-
-  // 워프 트리거 HTTP API 라우트 등록
-  registerWarpRoutes(app, world, (event) => {
-    if (io) publishWorldEvents(io, world, [event]);
-  });
 
   // 행성 생성 HTTP API 라우트 등록
   registerPlanetRoutes(app, world);
