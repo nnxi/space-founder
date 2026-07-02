@@ -9,7 +9,7 @@ export interface SignupDTO {
 }
 
 export class UserService {
-  // 기존 getMe 로직 유지
+  // 기존 getMe 로직 유지하기
   static async getMyProfile(token: string) {
     const supabase = getSupabaseClient();
     
