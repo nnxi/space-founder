@@ -6,18 +6,20 @@ export class SatelliteController {
   
   static async createSatellite(request: FastifyRequest, reply: FastifyReply, world: WorldEngine) {
     try {
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return reply.status(401).send({ error: "Missing or invalid token" });
+      // 미들웨어가 주입한 userId 추출
+      const userId = request.userId;
+      
+      if (!userId) {
+        return reply.status(401).send({ error: "Unauthorized" });
       }
-      const token = authHeader.split(" ")[1];
 
       const body = request.body as CreateSatelliteDTO;
       if (!body || !body.planetId) {
         return reply.status(400).send({ error: "Missing required field: planetId" });
       }
 
-      const result = await SatelliteService.createSatellite(token, body, world);
+      // token 대신 userId 전달
+      const result = await SatelliteService.createSatellite(userId, body, world);
       
       return reply.status(201).send({ 
         success: true, 
@@ -29,8 +31,6 @@ export class SatelliteController {
       
     } catch (error: any) {
       switch (error.message) {
-        case "UNAUTHORIZED":
-          return reply.status(401).send({ error: "Unauthorized token" });
         case "NOT_FOUND":
           return reply.status(404).send({ error: "User profile not found" });
         case "LIMIT_REACHED":

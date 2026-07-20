@@ -1,6 +1,8 @@
 import { getSupabaseClient } from "../../db/supabase";
 import * as bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
+import * as jwt from "jsonwebtoken";
+import { config } from "../../config"; 
 
 export interface SignupDTO {
   email: string;
@@ -8,20 +10,22 @@ export interface SignupDTO {
   username: string;
 }
 
+export interface LoginDTO {
+  email: string;
+  password: string;
+}
+
 export class UserService {
-  // 기존 getMe 로직 유지하기
-  static async getMyProfile(token: string) {
+  
+  // token 대신 userId를 직접 주입받습니다.
+  static async getMyProfile(userId: string) {
     const supabase = getSupabaseClient();
     
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      throw new Error("UNAUTHORIZED");
-    }
-
+    // 미들웨어에서 이미 검증했으므로, Supabase Auth 호출 로직 완전 삭제
     const { data: profile, error: dbError } = await supabase
       .from("profiles")
       .select("id, email, username, has_planet, satellite_count")
-      .eq("id", user.id)
+      .eq("id", userId)
       .maybeSingle();
 
     if (dbError) throw new Error(dbError.message);
@@ -39,14 +43,11 @@ export class UserService {
   static async signup(data: SignupDTO) {
     const supabase = getSupabaseClient();
     
-    // Bcrypt 해싱 (Salt Rounds: 10)
     const saltRounds = 10;
     const hashedPw = await bcrypt.hash(data.password, saltRounds);
     
-    // 고유 식별자 생성
     const newUserId = randomUUID();
 
-    // profiles 테이블에 직접 Insert
     const { data: newUser, error: dbError } = await supabase
       .from("profiles")
       .insert({
@@ -65,5 +66,48 @@ export class UserService {
     }
 
     return newUser;
+  }
+
+  static async login(data: LoginDTO) {
+    const supabase = getSupabaseClient();
+
+    // 1. 유저 이메일로 정보 조회
+    const { data: profile, error: dbError } = await supabase
+      .from("profiles")
+      .select("id, email, username, hashed_pw, last_login")
+      .eq("email", data.email)
+      .maybeSingle();
+
+    if (dbError) throw new Error(dbError.message);
+    if (!profile || !profile.hashed_pw) throw new Error("INVALID_CREDENTIALS");
+
+    // 2. 비밀번호 검증
+    const isValidPassword = await bcrypt.compare(data.password, profile.hashed_pw);
+    if (!isValidPassword) throw new Error("INVALID_CREDENTIALS");
+
+    // 3. 마지막 로그인 날짜 갱신 (스트릭 체크용)
+    const today = new Date().toISOString().split("T")[0];
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ last_login: today })
+      .eq("id", profile.id);
+
+    if (updateError) throw new Error(`Failed to update login date: ${updateError.message}`);
+
+    // 4. 자체 JWT 토큰 발급
+    const payload = { userId: profile.id, email: profile.email };
+    const token = jwt.sign(payload, config.jwtSecretKey!, { expiresIn: "24h" });
+
+    // 5. 토큰 및 유저 정보 반환
+    return {
+      token,
+      user: {
+        id: profile.id,
+        email: profile.email,
+        username: profile.username,
+        lastLogin: today
+      }
+    };
   }
 }

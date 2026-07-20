@@ -10,16 +10,15 @@ export interface CreatePlanetDTO {
 
 export class PlanetService {
   
-  static async checkPlanetExists(token: string): Promise<boolean> {
+  // token 대신 userId를 직접 주입받습니다.
+  static async checkPlanetExists(userId: string): Promise<boolean> {
     const supabase = getSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
-    if (authError || !user) throw new Error("UNAUTHORIZED");
-
+    // 미들웨어에서 이미 검증했으므로, Supabase Auth 호출 로직 삭제 완료
     const { data, error } = await supabase
       .from("user_planets")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -27,13 +26,10 @@ export class PlanetService {
     return !!data;
   }
 
-  static async createPlanet(token: string, data: CreatePlanetDTO, world: WorldEngine) {
+  // token 대신 userId를 직접 주입받습니다.
+  static async createPlanet(userId: string, data: CreatePlanetDTO, world: WorldEngine) {
     const supabase = getSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) throw new Error("UNAUTHORIZED");
 
-    // 초기 위치 및 궤도 물리 연산
     const radius = 5000 + Math.random() * 15000;
     const theta = Math.random() * Math.PI * 2;
     const x = radius * Math.cos(theta);
@@ -51,20 +47,18 @@ export class PlanetService {
     const vy = (Math.random() - 0.5) * 10;
     const vz = tangentZ * orbitSpeed;
 
-    // 프로필 닉네임 조회
     const { data: profile } = await supabase
       .from("profiles")
       .select("username")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     const currentUsername = profile?.username || "Space Founder";
 
-    // 1. DB에 행성 인서트
     const { data: newPlanet, error: dbError } = await supabase
       .from("user_planets")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         name: data.name.trim(),
         x, y, z, vx, vy, vz,
         constellation_id: Number(data.constellationId || 0),
@@ -76,17 +70,15 @@ export class PlanetService {
 
     if (dbError || !newPlanet) throw new Error(`Database failed: ${dbError?.message}`);
 
-    // 2. 프로필 업데이트
     const { error: profileError } = await supabase
       .from("profiles")
       .update({ has_planet: true })
-      .eq("id", user.id);
+      .eq("id", userId);
 
     if (profileError) {
       throw new Error(`Profile update failed: ${profileError.message}`);
     }
 
-    // 3. 물리 엔진 적재
     world.hydrate([{
       numericId: newPlanet.id,
       planet: {

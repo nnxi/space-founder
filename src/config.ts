@@ -34,4 +34,5 @@ export const config = {
       process.env.SUPABASE_SERVICE_ROLE_KEY ??
       requiredEnv("SUPABASE_ANON_KEY"),
   },
+  jwtSecretKey: process.env.JWT_SECRET_KEY,
 } as const;

@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorldEngine, PlanetPersistenceAdapter } from "../engine/world";
 import type { Planet } from "../types/planet";
 
-// 위성 데이터 로우 타입 정의
 export interface SatelliteRow {
   id: number;
   orbit_radius: number;
@@ -42,7 +41,8 @@ export interface UserPlanetRow {
   planet_type: string;
   color_hex: string;
   created_at: string;
-  planet_satellites?: SatelliteRow[]; // JOIN된 위성 배열
+  planet_satellites?: SatelliteRow[];
+  profiles?: { username: string } | { username: string }[] | null;
 }
 
 export class PlanetRepository implements PlanetPersistenceAdapter {
@@ -126,8 +126,8 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("user_planets")
-      // user_planets 조회 시 planet_satellites 테이블 JOIN
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination)")
+      // user_id를 외래키로 갖는 profiles 테이블의 username을 함께 JOIN
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username)")
       .order("id", { ascending: true });
 
     if (error) {
@@ -155,11 +155,16 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
       planetType: row.planet_type as any,
       colorHex: row.color_hex,
       radius: row.earth_radius ?? 1.0,
-    },
+      username: "NASA", // NASA 행성용 기본 소유자 지정
+    } as any,
   };
 }
 
 function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Planet } {
+  // profiles가 배열로 넘어오든 단일 객체로 넘어오든 안전하게 username 추출
+  const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  const username = profile?.username || "Space Explorer";
+
   return {
     numericId: row.id,
     planet: {
@@ -172,6 +177,7 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       colorHex: row.color_hex,
       radius: 1.0,
       satellites: row.planet_satellites ?? [],
+      username,
     } as any,
   };
 }

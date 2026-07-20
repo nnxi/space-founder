@@ -7,19 +7,15 @@ export interface CreateSatelliteDTO {
 
 export class SatelliteService {
   
-  static async createSatellite(token: string, data: CreateSatelliteDTO, world: WorldEngine) {
+  // token 대신 userId를 직접 주입받습니다.
+  static async createSatellite(userId: string, data: CreateSatelliteDTO, world: WorldEngine) {
     const supabase = getSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      throw new Error("UNAUTHORIZED");
-    }
 
     // 1. 프로필 위성 개수 검사
     const { data: profileRecord, error: profileGetError } = await supabase
       .from("profiles")
       .select("satellite_count")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profileGetError || !profileRecord) {
@@ -35,7 +31,7 @@ export class SatelliteService {
       .from("user_planets")
       .select("id")
       .eq("id", data.planetId)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (planetError || !planetRecord) {
@@ -67,7 +63,7 @@ export class SatelliteService {
     const { error: profileUpdateError } = await supabase
       .from("profiles")
       .update({ satellite_count: profileRecord.satellite_count + 1 })
-      .eq("id", user.id);
+      .eq("id", userId);
 
     if (profileUpdateError) {
       throw new Error(`Failed to increment satellite count: ${profileUpdateError.message}`);

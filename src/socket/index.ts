@@ -6,6 +6,7 @@ import { encodeWorldUpdatePacket } from "../protocol/world-packet";
 import type { WorldEvent } from "../types/planet";
 import type { SectorIndices } from "../types/sector";
 import { getSectorRoomId } from "../utils/sector";
+import * as jwt from "jsonwebtoken"; // 💡 JWT 라이브러리 추가
 import type {
   ClientToServerEvents,
   InterServerEvents,
@@ -19,15 +20,20 @@ export type SpaceSocketServer = Server<
   ClientToServerEvents,
   ServerToClientEvents,
   InterServerEvents,
-  SocketData & { myPlanetId?: number | null }
+  SocketData & { myPlanetId?: number | null; userId?: string } // 💡 userId 타입 추가
 >;
 
 type SpaceSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
   InterServerEvents,
-  SocketData & { myPlanetId?: number | null }
+  SocketData & { myPlanetId?: number | null; userId?: string } // 💡 userId 타입 추가
 >;
+
+interface JwtPayload {
+  userId: string;
+  email: string;
+}
 
 export function attachSocketServer(
   httpServer: HttpServer,
@@ -48,27 +54,35 @@ export function attachSocketServer(
     }
   });
 
-  // 소켓 미들웨어: JWT 토큰 검증 및 행성 ID 세션 매핑
+  // 💡 소켓 미들웨어: 자체 JWT 토큰 검증 및 행성 ID 세션 매핑 완료
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+      let token = socket.handshake.auth.token;
+
+      console.log("[DEBUG] 소켓 들어오는 토큰 확인:", token);
 
       if (!token) {
         return next(new Error("Authentication token is missing."));
       }
 
-      const supabase = getSupabaseClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-      if (authError || !user) {
-        return next(new Error("Invalid authentication token."));
+      // Bearer 접두사가 포함되어 있으면 분리하고, 없으면 전달받은 토큰을 그대로 사용
+      if (typeof token === "string" && token.startsWith("Bearer ")) {
+        token = token.split(" ")[1];
       }
 
+      // 1. 자체 JWT 시크릿 키 검증 및 복호화
+      const decoded = jwt.verify(token, config.jwtSecretKey!) as JwtPayload;
+      
+      // 소켓 데이터 세션에 가입된 유저 고유 ID 바인딩
+      socket.data.userId = decoded.userId;
+
+      // 2. 가입된 유저 ID 기반으로 내 행성 보유 여부 직접 조회
+      const supabase = getSupabaseClient();
       const { data: planetRecord, error: dbError } = await supabase
         .from("user_planets")
         .select("id")
-        .eq("user_id", user.id)
-        .single();
+        .eq("user_id", decoded.userId)
+        .maybeSingle(); // 한 건만 안전하게 수신
 
       if (dbError || !planetRecord) {
         socket.data.myPlanetId = null; 
@@ -126,7 +140,6 @@ export function attachSocketServer(
       void joinSectorRoom(socket, normalizedSector, world);
     };
 
-    // 💡 프론트엔드에서 실제로 사용하는 이벤트만 남김
     socket.on("sector:update", handleSectorJoin);
   });
 
@@ -229,7 +242,6 @@ async function joinSectorRoom(
 
   const planets = world.getPlanetsInRoom(newRoom);
 
-  // 💡 정적 데이터를 추출하여 sector:joined 패킷에 함께 전송
   const staticPlanets = planets.map((planet) => {
     const p = planet as any;
     const numericId = world.getNumericPlanetId(planet.id) || 0;
