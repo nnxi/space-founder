@@ -3,8 +3,6 @@ import { PlanetStore } from "./store";
 import { processPhysicsTick } from "./physics";
 import type { Planet, WarpRequest, WorldEvent } from "../types/planet";
 import { getConstellationId } from "../utils/constellation";
-import { randomPositionInSector } from "../utils/sector-geometry";
-import { getSectorIndices } from "../utils/sector";
 import type { SectorIndices } from "../types/sector";
 
 export interface HydratablePlanet {
@@ -24,7 +22,6 @@ export type TickCallback = (
 const TICK_INTERVAL_SEC = config.physicsTickIntervalMs / 1000;
 const CORE_SECTOR: SectorIndices = { x: 0, y: 0, z: 0 };
 const PLAYER_SUMMON_POSITION = { x: 500, y: 500, z: 500 };
-const SECTOR_SIZE = 100000;
 
 export class WorldEngine {
   private readonly store = new PlanetStore();
@@ -35,22 +32,21 @@ export class WorldEngine {
     this.persistence = adapter;
   }
 
-  // world.ts 내의 hydrate 메서드 수정
   hydrate(records: HydratablePlanet[]): void {
     this.store.clear();
 
     for (const { numericId, planet } of records) {
       const p = planet as any;
       
-      // 1. 안전하게 깊은 복사 처리 (위성 배열 포함)
+      // 1. 안전하게 깊은 복사 처리 (위성 배열 및 청크/로컬 좌표 포함)
       const copy: Planet = {
         ...planet,
-        position: { ...planet.position },
+        chunkIndex: { ...planet.chunkIndex },
+        localPosition: { ...planet.localPosition },
         velocity: { ...planet.velocity },
         homeSector: planet.homeSector 
           ? { x: planet.homeSector.x, y: planet.homeSector.y, z: planet.homeSector.z }
           : undefined,
-        // 주입된 위성 데이터가 있다면 안전하게 배열 복사
         satellites: p.satellites ? [...p.satellites] : [] 
       } as Planet;
 
@@ -59,9 +55,12 @@ export class WorldEngine {
         const angle = numericId * 137.5 * (Math.PI / 180);
         const spreadRadius = 25000 + numericId * 1500;
 
-        copy.position.x += Math.cos(angle) * spreadRadius;
-        copy.position.y += (Math.random() - 0.5) * 2000;
-        copy.position.z += Math.sin(angle) * spreadRadius;
+        copy.localPosition.x += Math.cos(angle) * spreadRadius;
+        copy.localPosition.y += (Math.random() - 0.5) * 2000;
+        copy.localPosition.z += Math.sin(angle) * spreadRadius;
+
+        // 분산 배치 시 로컬 좌표가 청크 크기를 초과할 경우 보정
+        this.normalizeChunkPosition(copy);
       }
 
       this.store.setPlanet(copy, numericId);
@@ -119,9 +118,10 @@ export class WorldEngine {
     const planet = this.getPlanet(planetId);
     if (!planet) throw new Error(`Planet not found: ${planetId}`);
 
-    const fromSector = getSectorIndices(planet.position);
+    const fromSector = { ...planet.chunkIndex };
 
-    planet.position = { ...PLAYER_SUMMON_POSITION };
+    planet.chunkIndex = { ...CORE_SECTOR };
+    planet.localPosition = { ...PLAYER_SUMMON_POSITION };
     planet.velocity = { x: 0, y: 0, z: 0 };
     planet.homeSector = { ...CORE_SECTOR };
     planet.constellationId = getConstellationId(CORE_SECTOR);
@@ -144,7 +144,7 @@ export class WorldEngine {
     const planet = this.getPlanet(planetId);
     if (!planet) throw new Error(`Planet not found: ${planetId}`);
 
-    const sector = getSectorIndices(planet.position);
+    const sector = { ...planet.chunkIndex };
     planet.warpAuthorized = true;
 
     this.persistPlanet(planet);
@@ -161,14 +161,19 @@ export class WorldEngine {
     const planet = this.getPlanet(request.planetId);
     if (!planet) throw new Error(`Unknown planet id: ${request.planetId}`);
 
-    const fromSector = getSectorIndices(planet.position);
+    const fromSector = { ...planet.chunkIndex };
     const targetSector: SectorIndices = {
       x: request.targetSectorX,
       y: request.targetSectorY,
       z: request.targetSectorZ,
     };
 
-    planet.position = randomPositionInSector(targetSector);
+    planet.chunkIndex = { ...targetSector };
+    planet.localPosition = {
+      x: Math.random() * config.sectorSize,
+      y: Math.random() * config.sectorSize,
+      z: Math.random() * config.sectorSize,
+    };
     planet.homeSector = { ...targetSector };
     planet.constellationId = getConstellationId(targetSector);
     planet.warpAuthorized = true;
@@ -186,5 +191,25 @@ export class WorldEngine {
   private persistPlanet(planet: Planet): void {
     if (!this.persistence) return;
     this.persistence.persistPlanet(planet, this.getNumericPlanetId(planet.id));
+  }
+
+  private normalizeChunkPosition(planet: Planet): void {
+    const deltaX = Math.floor(planet.localPosition.x / config.sectorSize);
+    if (deltaX !== 0) {
+      planet.chunkIndex.x += deltaX;
+      planet.localPosition.x -= deltaX * config.sectorSize;
+    }
+
+    const deltaY = Math.floor(planet.localPosition.y / config.sectorSize);
+    if (deltaY !== 0) {
+      planet.chunkIndex.y += deltaY;
+      planet.localPosition.y -= deltaY * config.sectorSize;
+    }
+
+    const deltaZ = Math.floor(planet.localPosition.z / config.sectorSize);
+    if (deltaZ !== 0) {
+      planet.chunkIndex.z += deltaZ;
+      planet.localPosition.z -= deltaZ * config.sectorSize;
+    }
   }
 }

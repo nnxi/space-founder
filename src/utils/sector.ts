@@ -3,29 +3,18 @@ import type { Planet, Vec3 } from "../types/planet";
 import type { SectorIndices } from "../types/sector";
 import { isValidSectorIndex } from "./sector-geometry";
 
-export function getSectorIndices(position: Vec3, sectorSize = config.sectorSize): SectorIndices {
-  return {
-    x: Math.floor(position.x / sectorSize),
-    y: Math.floor(position.y / sectorSize),
-    z: Math.floor(position.z / sectorSize),
-  };
-}
-
 export function getSectorRoomId(sector: SectorIndices): string {
   return `sector_${sector.x}_${sector.y}_${sector.z}`;
 }
 
-export function getSectorRoomIdFromPosition(position: Vec3): string {
-  return getSectorRoomId(getSectorIndices(position));
-}
-
-// 공간 해시 그리드: 행성의 위치를 기반으로 소켓 룸 분배 연산을 O(1)로 최적화
+// 공간 해시 그리드: 행성의 chunkIndex를 기반으로 소켓 룸 분배 연산을 O(1)로 최적화
 export class SpatialGrid {
   private readonly grid = new Map<string, Map<string, Planet>>();
   private readonly planetRooms = new Map<string, string>();
 
   updatePlanet(planet: Planet): void {
-    const newRoomId = getSectorRoomIdFromPosition(planet.position);
+    // 절대 좌표 계산 없이 행성의 chunkIndex를 바로 사용하여 룸 ID 추출
+    const newRoomId = getSectorRoomId(planet.chunkIndex);
     const oldRoomId = this.planetRooms.get(planet.id);
 
     if (oldRoomId === newRoomId) {

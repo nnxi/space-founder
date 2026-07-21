@@ -1,3 +1,4 @@
+import { config } from "../config";
 import { applyGravityTether } from "./gravity";
 import type { Planet, WorldEvent } from "../types/planet";
 import type { PlanetStore } from "./store";
@@ -12,23 +13,50 @@ export function processPhysicsTick(
   const planets = store.getAllPlanets();
 
   for (const planet of planets.values()) {
-    // NASA 행성(warpAuthorized 플래그 없음)은 속도를 0으로 강제하고 위치 업데이트를 건너뜀
-    // 그리드 업데이트도 생략하여 O(1) 성능 최적화 달성
+    // NASA 행성은 속도를 0으로 강제하고 위치 업데이트 생략
     if (!planet.warpAuthorized) {
       planet.velocity = { x: 0, y: 0, z: 0 };
       continue;
     }
 
-    // 유저 행성에 대해서만 물리 이동 연산 수행
-    planet.position.x += planet.velocity.x * intervalSec;
-    planet.position.y += planet.velocity.y * intervalSec;
-    planet.position.z += planet.velocity.z * intervalSec;
+    // 1. 로컬 좌표에 속도 적용
+    planet.localPosition.x += planet.velocity.x * intervalSec;
+    planet.localPosition.y += planet.velocity.y * intervalSec;
+    planet.localPosition.z += planet.velocity.z * intervalSec;
 
+    // 2. 섹터 경계 초과 시 청크 인덱스 및 로컬 좌표 보정
+    normalizeChunkPosition(planet);
+
+    // 3. 중력 적용
     applyGravityTether(planet, intervalSec);
 
-    // 연산이 끝난 후 공간 해시 그리드에 새로운 위치 갱신
+    // 중력 연산으로 인해 위치가 크게 변했을 수 있으므로 다시 한번 보정
+    normalizeChunkPosition(planet);
+
+    // 연산 완료 후 공간 해시 그리드에 갱신
     store.updateGrid(planet);
   }
 
   return events;
+}
+
+// 로컬 좌표가 범위를 벗어나면 청크 인덱스를 갱신하는 헬퍼 함수
+function normalizeChunkPosition(planet: Planet): void {
+  const deltaX = Math.floor(planet.localPosition.x / config.sectorSize);
+  if (deltaX !== 0) {
+    planet.chunkIndex.x += deltaX;
+    planet.localPosition.x -= deltaX * config.sectorSize;
+  }
+
+  const deltaY = Math.floor(planet.localPosition.y / config.sectorSize);
+  if (deltaY !== 0) {
+    planet.chunkIndex.y += deltaY;
+    planet.localPosition.y -= deltaY * config.sectorSize;
+  }
+
+  const deltaZ = Math.floor(planet.localPosition.z / config.sectorSize);
+  if (deltaZ !== 0) {
+    planet.chunkIndex.z += deltaZ;
+    planet.localPosition.z -= deltaZ * config.sectorSize;
+  }
 }

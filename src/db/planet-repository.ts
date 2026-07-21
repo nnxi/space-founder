@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { config } from "../config";
 import type { WorldEngine, PlanetPersistenceAdapter } from "../engine/world";
 import type { Planet } from "../types/planet";
 
@@ -126,7 +127,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("user_planets")
-      // user_id를 외래키로 갖는 profiles 테이블의 username을 함께 JOIN
       .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username)")
       .order("id", { ascending: true });
 
@@ -138,12 +138,40 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   }
 }
 
+// 절대 좌표를 청크 좌표계로 변환하는 유틸리티 함수
+function toChunkSpace(x: number, y: number, z: number) {
+  const cx = Math.floor(x / config.sectorSize);
+  const cy = Math.floor(y / config.sectorSize);
+  const cz = Math.floor(z / config.sectorSize);
+  
+  return {
+    chunkIndex: { x: cx, y: cy, z: cz },
+    localPosition: {
+      x: x - (cx * config.sectorSize),
+      y: y - (cy * config.sectorSize),
+      z: z - (cz * config.sectorSize),
+    }
+  };
+}
+
+// 청크 좌표계를 절대 좌표계로 변환하는 유틸리티 함수
+function toAbsoluteSpace(chunkIndex: { x: number, y: number, z: number }, localPosition: { x: number, y: number, z: number }) {
+  return {
+    x: (chunkIndex.x * config.sectorSize) + localPosition.x,
+    y: (chunkIndex.y * config.sectorSize) + localPosition.y,
+    z: (chunkIndex.z * config.sectorSize) + localPosition.z,
+  };
+}
+
 function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Planet } {
+  const { chunkIndex, localPosition } = toChunkSpace(row.x, row.y, row.z);
+
   return {
     numericId: row.id,
     planet: {
       id: row.name,
-      position: { x: row.x, y: row.y, z: row.z },
+      chunkIndex,
+      localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
       warpAuthorized: false,
       homeSector: {
@@ -155,21 +183,23 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
       planetType: row.planet_type as any,
       colorHex: row.color_hex,
       radius: row.earth_radius ?? 1.0,
-      username: "NASA", // NASA 행성용 기본 소유자 지정
+      username: "NASA",
     } as any,
   };
 }
 
 function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Planet } {
-  // profiles가 배열로 넘어오든 단일 객체로 넘어오든 안전하게 username 추출
   const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
   const username = profile?.username || "Space Explorer";
+  
+  const { chunkIndex, localPosition } = toChunkSpace(row.x, row.y, row.z);
 
   return {
     numericId: row.id,
     planet: {
       id: row.name,
-      position: { x: row.x, y: row.y, z: row.z },
+      chunkIndex,
+      localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
       warpAuthorized: true,
       constellationId: row.constellation_id,
@@ -184,12 +214,14 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
 
 function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetRow> {
   const p = planet as any;
+  const absPos = toAbsoluteSpace(planet.chunkIndex, planet.localPosition);
+
   return {
     id: numericId,
     name: planet.id,
-    x: planet.position.x,
-    y: planet.position.y,
-    z: planet.position.z,
+    x: absPos.x,
+    y: absPos.y,
+    z: absPos.z,
     vx: planet.velocity.x,
     vy: planet.velocity.y,
     vz: planet.velocity.z,

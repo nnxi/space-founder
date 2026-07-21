@@ -4,6 +4,9 @@ import {
   WORLD_PACKET_HEADER_BYTES,
   WORLD_PACKET_PLANET_BYTES,
   WORLD_PACKET_PLANET_ID_OFFSET,
+  WORLD_PACKET_CHUNK_X_OFFSET,
+  WORLD_PACKET_CHUNK_Y_OFFSET,
+  WORLD_PACKET_CHUNK_Z_OFFSET,
   WORLD_PACKET_POSITION_X_OFFSET,
   WORLD_PACKET_POSITION_Y_OFFSET,
   WORLD_PACKET_POSITION_Z_OFFSET,
@@ -15,7 +18,8 @@ import {
 
 export interface DecodedPlanetSnapshot {
   id: number;
-  position: { x: number; y: number; z: number };
+  chunkIndex: { x: number; y: number; z: number };
+  localPosition: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
 }
 
@@ -38,10 +42,20 @@ export function encodeWorldUpdatePacket(
   for (const planet of planets) {
     const numericId = resolveNumericId(planet.id) || 0;
     
+    // 16비트 부호 없는 정수
     buffer.writeUInt16LE(numericId, offset + WORLD_PACKET_PLANET_ID_OFFSET);
-    buffer.writeFloatLE(planet.position?.x || 0, offset + WORLD_PACKET_POSITION_X_OFFSET);
-    buffer.writeFloatLE(planet.position?.y || 0, offset + WORLD_PACKET_POSITION_Y_OFFSET);
-    buffer.writeFloatLE(planet.position?.z || 0, offset + WORLD_PACKET_POSITION_Z_OFFSET);
+    
+    // 청크 인덱스: 32비트 부호 있는 정수
+    buffer.writeInt32LE(planet.chunkIndex?.x || 0, offset + WORLD_PACKET_CHUNK_X_OFFSET);
+    buffer.writeInt32LE(planet.chunkIndex?.y || 0, offset + WORLD_PACKET_CHUNK_Y_OFFSET);
+    buffer.writeInt32LE(planet.chunkIndex?.z || 0, offset + WORLD_PACKET_CHUNK_Z_OFFSET);
+
+    // 로컬 좌표: 32비트 실수
+    buffer.writeFloatLE(planet.localPosition?.x || 0, offset + WORLD_PACKET_POSITION_X_OFFSET);
+    buffer.writeFloatLE(planet.localPosition?.y || 0, offset + WORLD_PACKET_POSITION_Y_OFFSET);
+    buffer.writeFloatLE(planet.localPosition?.z || 0, offset + WORLD_PACKET_POSITION_Z_OFFSET);
+    
+    // 속도 벡터: 32비트 실수
     buffer.writeFloatLE(planet.velocity?.x || 0, offset + WORLD_PACKET_VELOCITY_X_OFFSET);
     buffer.writeFloatLE(planet.velocity?.y || 0, offset + WORLD_PACKET_VELOCITY_Y_OFFSET);
     buffer.writeFloatLE(planet.velocity?.z || 0, offset + WORLD_PACKET_VELOCITY_Z_OFFSET);
@@ -66,7 +80,12 @@ export function decodeWorldUpdatePacket(
   ) {
     planets.push({
       id: buffer.readUInt16LE(offset + WORLD_PACKET_PLANET_ID_OFFSET),
-      position: {
+      chunkIndex: {
+        x: buffer.readInt32LE(offset + WORLD_PACKET_CHUNK_X_OFFSET),
+        y: buffer.readInt32LE(offset + WORLD_PACKET_CHUNK_Y_OFFSET),
+        z: buffer.readInt32LE(offset + WORLD_PACKET_CHUNK_Z_OFFSET),
+      },
+      localPosition: {
         x: buffer.readFloatLE(offset + WORLD_PACKET_POSITION_X_OFFSET),
         y: buffer.readFloatLE(offset + WORLD_PACKET_POSITION_Y_OFFSET),
         z: buffer.readFloatLE(offset + WORLD_PACKET_POSITION_Z_OFFSET),
