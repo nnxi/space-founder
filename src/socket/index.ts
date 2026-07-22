@@ -265,7 +265,7 @@ async function updateSectorSubscriptions(
         return {
           planetId: numericId,
           planetName: p.name || planet.id || `Planet-${numericId}`,
-          userType: p.userType || "default",
+          userType: p.role,
           username: p.username || "Space Explorer",
           colorHex: p.colorHex || "#ffffff",
           planetType: p.planetType || "rocky",

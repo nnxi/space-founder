@@ -20,9 +20,6 @@ export interface NasaPlanetRow {
   vx: number;
   vy: number;
   vz: number;
-  home_sector_x: number;
-  home_sector_y: number;
-  home_sector_z: number;
   constellation_id: number;
   planet_type: string;
   color_hex: string;
@@ -116,7 +113,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchNasaPlanets(): Promise<NasaPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("nasa_planets")
-      .select("id, name, earth_radius, x, y, z, vx, vy, vz, home_sector_x, home_sector_y, home_sector_z, constellation_id, planet_type, color_hex, role")
+      .select("id, name, earth_radius, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, role")
       .order("id", { ascending: true });
 
     if (error) {
@@ -129,7 +126,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("user_planets")
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username), role")
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username), role")
       .order("id", { ascending: true });
 
     if (error) {
@@ -175,11 +172,6 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
-      homeSector: {
-        x: row.home_sector_x,
-        y: row.home_sector_y,
-        z: row.home_sector_z,
-      },
       constellationId: row.constellation_id,
       planetType: row.planet_type as any,
       colorHex: row.color_hex,
@@ -203,7 +195,6 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
-      warpAuthorized: true,
       constellationId: row.constellation_id,
       planetType: row.planet_type as any,
       colorHex: row.color_hex,

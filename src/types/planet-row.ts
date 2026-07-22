@@ -7,14 +7,11 @@ export interface PlanetRow {
   vx: number;
   vy: number;
   vz: number;
-  warp_authorized: boolean;
-  home_sector_x: number;
-  home_sector_y: number;
-  home_sector_z: number;
   constellation_id: number;
   planet_type: string;
   color_hex: string;
   updated_at: string;
+  role: string;
 }
 
 export interface PlanetInsertRow {
@@ -26,12 +23,9 @@ export interface PlanetInsertRow {
   vx: number;
   vy: number;
   vz: number;
-  warp_authorized: boolean;
-  home_sector_x: number;
-  home_sector_y: number;
-  home_sector_z: number;
   constellation_id: number;
   planet_type: string;
   color_hex: string;
   updated_at?: string;
+  role: string;
 }

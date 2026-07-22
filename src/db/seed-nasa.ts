@@ -1,7 +1,6 @@
 import axios from "axios";
 import { config } from "../config";
 import { getConstellationId } from "../utils/constellation";
-import { getSectorIndices } from "../utils/sector";
 import { getSupabaseClient } from "./supabase";
 
 const NASA_TAP_URL =
@@ -156,7 +155,6 @@ function buildPlanetRows(records: NasaExoplanetRecord[]): any[] {
       y: normalized.y,
       z: normalized.z,
     };
-    const homeSector = getSectorIndices(position);
 
     // 행성 이름 기반 해시 추출
     const nameHash = getStringHash(record.pl_name);
@@ -205,14 +203,11 @@ function buildPlanetRows(records: NasaExoplanetRecord[]): any[] {
       vx: 0,
       vy: 0,
       vz: 0,
-      warp_authorized: false,
-      home_sector_x: homeSector.x,
-      home_sector_y: homeSector.y,
-      home_sector_z: homeSector.z,
       constellation_id: seedId, 
       planet_type: planetType,
       color_hex: colorHex,
       updated_at: updatedAt,
+      role: "default",
     };
   });
 }
