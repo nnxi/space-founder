@@ -63,7 +63,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   }
 
   persistPlanet(planet: Planet, numericId: number): void {
-    if ((planet as any).role == "default") {
+    if ((planet as any).role === "default") {
       return; 
     }
 
@@ -87,26 +87,30 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     planets: ReadonlyMap<string, Planet>,
     resolveNumericId: (planetId: string) => number,
   ): Promise<void> {
-    const rows: Partial<UserPlanetRow>[] = [];
+    try {
+      const rows: Partial<UserPlanetRow>[] = [];
 
-    for (const planet of planets.values()) {
-      if ((planet as any).role == "default") {
-        continue;
+      for (const planet of planets.values()) {
+        if ((planet as any).role === "default") {
+          continue;
+        }
+
+        rows.push(toUserInsertRow(planet, resolveNumericId(planet.id)));
       }
 
-      rows.push(toUserInsertRow(planet, resolveNumericId(planet.id)));
-    }
+      if (rows.length === 0) {
+        return;
+      }
 
-    if (rows.length === 0) {
-      return;
-    }
+      const { error } = await this.supabase
+        .from("user_planets")
+        .upsert(rows, { onConflict: "id" });
 
-    const { error } = await this.supabase
-      .from("user_planets")
-      .upsert(rows, { onConflict: "id" });
-
-    if (error) {
-      throw new Error(`Failed to upsert user planet snapshot: ${error.message}`);
+      if (error) {
+        console.error(`[SnapshotScheduler] DB Upsert failed: ${error.message}`);
+      }
+    } catch (error) {
+      console.error(`[SnapshotScheduler] Network request failed:`, error);
     }
   }
 
@@ -137,7 +141,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   }
 }
 
-// 절대 좌표를 청크 좌표계로 변환하는 유틸리티 함수
 function toChunkSpace(x: number, y: number, z: number) {
   const cx = Math.floor(x / config.sectorSize);
   const cy = Math.floor(y / config.sectorSize);
@@ -153,7 +156,6 @@ function toChunkSpace(x: number, y: number, z: number) {
   };
 }
 
-// 청크 좌표계를 절대 좌표계로 변환하는 유틸리티 함수
 function toAbsoluteSpace(chunkIndex: { x: number, y: number, z: number }, localPosition: { x: number, y: number, z: number }) {
   return {
     x: (chunkIndex.x * config.sectorSize) + localPosition.x,
@@ -168,7 +170,8 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
   return {
     numericId: row.id,
     planet: {
-      id: row.name,
+      id: `nasa_${row.id}`, // 고유 식별 키
+      name: row.name, // 행성 표시 이름
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
@@ -191,7 +194,8 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
   return {
     numericId: row.id,
     planet: {
-      id: row.name,
+      id: `user_${row.id}`, // 고유 식별 키
+      name: row.name, // 행성 표시 이름
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
@@ -202,6 +206,7 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       satellites: row.planet_satellites ?? [],
       username,
       role: row.role || "user",
+      userId: row.user_id,
     } as any,
   };
 }
@@ -210,17 +215,24 @@ function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetR
   const p = planet as any;
   const absPos = toAbsoluteSpace(planet.chunkIndex, planet.localPosition);
 
-  return {
+  const row: Partial<UserPlanetRow> = {
     id: numericId,
-    name: planet.id,
-    x: absPos.x,
-    y: absPos.y,
-    z: absPos.z,
-    vx: planet.velocity.x,
-    vy: planet.velocity.y,
-    vz: planet.velocity.z,
-    constellation_id: planet.constellationId,
+    name: p.name || planet.id, // DB name 컬럼에는 행성 표시 이름 저장
+    x: absPos.x || 0,
+    y: absPos.y || 0,
+    z: absPos.z || 0,
+    vx: planet.velocity?.x || 0,
+    vy: planet.velocity?.y || 0,
+    vz: planet.velocity?.z || 0,
+    constellation_id: planet.constellationId || 0,
     planet_type: p.planetType || "rocky",
     color_hex: p.colorHex || "#ffffff",
+    role: p.role || "user",
   };
+
+  if (p.userId) {
+    row.user_id = p.userId;
+  }
+
+  return row;
 }

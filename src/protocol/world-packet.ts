@@ -41,9 +41,10 @@ export function encodeWorldUpdatePacket(
 
   for (const planet of planets) {
     const numericId = resolveNumericId(planet.id) || 0;
+    const encodedId = (planet as any).role === "default" ? -numericId : numericId;
     
-    // 16비트 부호 없는 정수
-    buffer.writeUInt16LE(numericId, offset + WORLD_PACKET_PLANET_ID_OFFSET);
+    // 32비트 부호 있는 정수로 변경하여 큰 ID 및 음수 허용
+    buffer.writeInt32LE(encodedId, offset + WORLD_PACKET_PLANET_ID_OFFSET);
     
     // 청크 인덱스: 32비트 부호 있는 정수
     buffer.writeInt32LE(planet.chunkIndex?.x || 0, offset + WORLD_PACKET_CHUNK_X_OFFSET);
@@ -79,7 +80,7 @@ export function decodeWorldUpdatePacket(
     offset += WORLD_PACKET_PLANET_BYTES
   ) {
     planets.push({
-      id: buffer.readUInt16LE(offset + WORLD_PACKET_PLANET_ID_OFFSET),
+      id: buffer.readInt32LE(offset + WORLD_PACKET_PLANET_ID_OFFSET),
       chunkIndex: {
         x: buffer.readInt32LE(offset + WORLD_PACKET_CHUNK_X_OFFSET),
         y: buffer.readInt32LE(offset + WORLD_PACKET_CHUNK_Y_OFFSET),

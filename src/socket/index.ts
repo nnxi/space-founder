@@ -106,15 +106,21 @@ export function attachSocketServer(
 
     if (myPlanetNumericId !== null && myPlanetNumericId !== undefined) {
       let currentSector = { x: 0, y: 0, z: 0 };
-      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
-      
+
+      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId, "user");
+
       if (myPlanetIdString) {
         const myPlanet = world.getPlanet(myPlanetIdString);
         if (myPlanet && myPlanet.chunkIndex) {
           currentSector = { ...myPlanet.chunkIndex };
+        } else {
+          console.warn(`[Init Warning] Planet instance missing for ID string: ${myPlanetIdString}`);
         }
+      } else {
+        console.warn(`[Init Warning] Could not resolve string ID for numeric ID: ${myPlanetNumericId}`);
       }
 
+      // 내 행성의 정확한 최신 청크 섹터 좌표를 전달
       socket.emit("player:init", { 
         myPlanetId: myPlanetNumericId,
         currentSector: currentSector
@@ -135,7 +141,8 @@ export function attachSocketServer(
         return;
       }
 
-      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
+      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId, "user");
+
       if (!myPlanetIdString) {
         callback?.({ ok: false, error: "Planet not found in world." });
         return;
@@ -265,7 +272,7 @@ async function updateSectorSubscriptions(
         return {
           planetId: numericId,
           planetName: p.name || planet.id || `Planet-${numericId}`,
-          userType: p.role,
+          userType: p.role || "default", // role 매핑 및 Fallback 보완
           username: p.username || "Space Explorer",
           colorHex: p.colorHex || "#ffffff",
           planetType: p.planetType || "rocky",

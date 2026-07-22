@@ -96,8 +96,8 @@ export class WorldEngine {
     return numericId;
   }
 
-  getPlanetIdByNumericId(numericPlanetId: number): string | undefined {
-    return this.store.getPlanetIdByNumeric(numericPlanetId);
+  getPlanetIdByNumericId(numericPlanetId: number, role: string = "user"): string | undefined {
+    return this.store.getPlanetIdByNumeric(numericPlanetId, role);
   }
 
   getPlanetsInRoom(roomId: string): Planet[] {
@@ -109,7 +109,7 @@ export class WorldEngine {
   }
 
   summonPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
+    const planetId = this.getPlanetIdByNumericId(numericPlanetId, "user");
     if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
 
     const planet = this.getPlanet(planetId);
@@ -133,7 +133,7 @@ export class WorldEngine {
   }
 
   warpPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
+    const planetId = this.getPlanetIdByNumericId(numericPlanetId, "user");
     if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
 
     const planet = this.getPlanet(planetId);
