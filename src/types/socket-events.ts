@@ -42,8 +42,10 @@ export interface ServerToClientEvents {
     room: string;
     sector: SectorIndices;
     staticPlanets: {
-      id: number;
-      name: string;
+      planetId: number;
+      planetName: string;
+      userType: string;
+      username: string;
       colorHex: string;
       planetType: string;
       constellationId: number;

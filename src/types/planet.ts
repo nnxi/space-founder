@@ -17,13 +17,13 @@ export interface Planet {
   localPosition: Vec3;
   velocity: Vec3;
   
-  warpAuthorized: boolean;
   homeSector?: SectorIndices;
   radius: number;
   constellationId: number;
   planetType: PlanetType;
   colorHex: string;
   username: string;
+  role: string;
 }
 
 export interface WarpRequest {

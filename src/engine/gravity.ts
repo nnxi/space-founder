@@ -6,16 +6,16 @@ export function applyGravityTether(
   planet: Planet,
   tickIntervalSec: number,
 ): void {
-  if (planet.warpAuthorized) {
+  if ((planet as any).role !== "default") {
     return;
   }
 
   if (!planet.homeSector) return;
 
   const origin = getSectorOrigin(planet.homeSector);
-  const dx = planet.position.x - origin.x;
-  const dy = planet.position.y - origin.y;
-  const dz = planet.position.z - origin.z;
+  const dx = planet.velocity.x - origin.x;
+  const dy = planet.velocity.y - origin.y;
+  const dz = planet.velocity.z - origin.z;
   const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
   if (distance === 0) {
@@ -38,9 +38,9 @@ export function applyGravityTether(
   if (distance > config.gravityMaxDistance) {
     const scale = config.gravityMaxDistance / distance;
 
-    planet.position.x = origin.x + dx * scale;
-    planet.position.y = origin.y + dy * scale;
-    planet.position.z = origin.z + dz * scale;
+    planet.velocity.x = origin.x + dx * scale;
+    planet.velocity.y = origin.y + dy * scale;
+    planet.velocity.z = origin.z + dz * scale;
 
     const outwardDot =
       planet.velocity.x * (-inwardX) +

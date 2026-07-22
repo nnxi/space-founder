@@ -14,7 +14,7 @@ export function processPhysicsTick(
 
   for (const planet of planets.values()) {
     // NASA 행성은 속도를 0으로 강제하고 위치 업데이트 생략
-    if (!planet.warpAuthorized) {
+    if ((planet as any).role == "default") {
       planet.velocity = { x: 0, y: 0, z: 0 };
       continue;
     }

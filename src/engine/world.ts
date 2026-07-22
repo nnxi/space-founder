@@ -51,7 +51,8 @@ export class WorldEngine {
       } as Planet;
 
       // 2. NASA 행성(다중 행성 배치 로직) 처리
-      if (!copy.warpAuthorized) {
+      // warpAuthorized 대신 role 필드 검사로 변경
+      if ((copy as any).role !== "user") {
         const angle = numericId * 137.5 * (Math.PI / 180);
         const spreadRadius = 25000 + numericId * 1500;
 
@@ -125,7 +126,6 @@ export class WorldEngine {
     planet.velocity = { x: 0, y: 0, z: 0 };
     planet.homeSector = { ...CORE_SECTOR };
     planet.constellationId = getConstellationId(CORE_SECTOR);
-    planet.warpAuthorized = true;
 
     this.persistPlanet(planet);
 
@@ -145,7 +145,6 @@ export class WorldEngine {
     if (!planet) throw new Error(`Planet not found: ${planetId}`);
 
     const sector = { ...planet.chunkIndex };
-    planet.warpAuthorized = true;
 
     this.persistPlanet(planet);
 
@@ -176,7 +175,6 @@ export class WorldEngine {
     };
     planet.homeSector = { ...targetSector };
     planet.constellationId = getConstellationId(targetSector);
-    planet.warpAuthorized = true;
 
     this.persistPlanet(planet);
 

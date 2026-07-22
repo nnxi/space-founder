@@ -263,8 +263,9 @@ async function updateSectorSubscriptions(
         const numericId = world.getNumericPlanetId(planet.id) || 0;
         
         return {
-          id: numericId,
-          name: p.name || planet.id || `Planet-${numericId}`,
+          planetId: numericId,
+          planetName: p.name || planet.id || `Planet-${numericId}`,
+          userType: p.userType || "default",
           username: p.username || "Space Explorer",
           colorHex: p.colorHex || "#ffffff",
           planetType: p.planetType || "rocky",

@@ -36,6 +36,20 @@ export class PlanetService {
     const y = (Math.random() - 0.5) * 2000;
     const z = radius * Math.sin(theta);
 
+    const CHUNK_SIZE = 100000; 
+
+    const chunkIndex = {
+      x: Math.floor(x / CHUNK_SIZE),
+      y: Math.floor(y / CHUNK_SIZE),
+      z: Math.floor(z / CHUNK_SIZE),
+    };
+
+    const localPosition = {
+      x: x % CHUNK_SIZE,
+      y: y % CHUNK_SIZE,
+      z: z % CHUNK_SIZE,
+    };
+
     const length = Math.sqrt(x * x + z * z);
     const tangentX = -z / length;
     const tangentZ = x / length;
@@ -83,14 +97,15 @@ export class PlanetService {
       numericId: newPlanet.id,
       planet: {
         id: data.name.trim(),
-        position: { x, y, z },
+        chunkIndex: chunkIndex,
+        localPosition: localPosition,
         velocity: { x: vx, y: vy, z: vz },
-        warpAuthorized: true,
         constellationId: Number(data.constellationId || 0),
         planetType: data.planetType || "rocky",
         colorHex: data.colorHex || "#ffffff",
         radius: 1.0,
-        username: currentUsername
+        username: currentUsername,
+        role: "user"
       },
     }]);
 

@@ -26,6 +26,7 @@ export interface NasaPlanetRow {
   constellation_id: number;
   planet_type: string;
   color_hex: string;
+  role: string;
 }
 
 export interface UserPlanetRow {
@@ -44,6 +45,7 @@ export interface UserPlanetRow {
   created_at: string;
   planet_satellites?: SatelliteRow[];
   profiles?: { username: string } | { username: string }[] | null;
+  role: string;
 }
 
 export class PlanetRepository implements PlanetPersistenceAdapter {
@@ -64,7 +66,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   }
 
   persistPlanet(planet: Planet, numericId: number): void {
-    if (!planet.warpAuthorized) {
+    if ((planet as any).role == "default") {
       return; 
     }
 
@@ -91,7 +93,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     const rows: Partial<UserPlanetRow>[] = [];
 
     for (const planet of planets.values()) {
-      if (!planet.warpAuthorized) {
+      if ((planet as any).role == "default") {
         continue;
       }
 
@@ -114,7 +116,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchNasaPlanets(): Promise<NasaPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("nasa_planets")
-      .select("id, name, earth_radius, x, y, z, vx, vy, vz, home_sector_x, home_sector_y, home_sector_z, constellation_id, planet_type, color_hex")
+      .select("id, name, earth_radius, x, y, z, vx, vy, vz, home_sector_x, home_sector_y, home_sector_z, constellation_id, planet_type, color_hex, role")
       .order("id", { ascending: true });
 
     if (error) {
@@ -127,7 +129,7 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
     const { data, error } = await this.supabase
       .from("user_planets")
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username)")
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, warp_authorized, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username), role")
       .order("id", { ascending: true });
 
     if (error) {
@@ -173,7 +175,6 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
-      warpAuthorized: false,
       homeSector: {
         x: row.home_sector_x,
         y: row.home_sector_y,
@@ -184,6 +185,7 @@ function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Plan
       colorHex: row.color_hex,
       radius: row.earth_radius ?? 1.0,
       username: "NASA",
+      role: row.role || "default",
     } as any,
   };
 }
@@ -208,6 +210,7 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       radius: 1.0,
       satellites: row.planet_satellites ?? [],
       username,
+      role: row.role || "user",
     } as any,
   };
 }
