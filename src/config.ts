@@ -17,7 +17,7 @@ function normalizeSupabaseUrl(url: string): string {
 export const config = {
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST ?? "0.0.0.0",
-  physicsTickIntervalMs: 10_000,
+  physicsTickIntervalMs: 5_000,
   sectorSize: 100_000,
   sectorGridSize: Number(process.env.SECTOR_GRID_SIZE) || 50,
   maxPlanets: Number(process.env.MAX_PLANETS) || 1200,

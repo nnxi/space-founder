@@ -77,27 +77,14 @@ export function attachSocketServer(
 
       let userId: string;
 
-      //[TEST>
-      // 테스트용 토큰 처리
-      if (token === "DEV_TEST_DUMMY_TOKEN_1234") {
-        userId = "49f0f5a6-60c6-4d17-9b4d-be148bb6f616"; // 테스트용 유저 ID
-        socket.data.userId = userId;
-      } else {
-        // 실제 JWT 검증 로직
-        const decoded = jwt.verify(token, config.jwtSecretKey!) as JwtPayload;
-        userId = decoded.userId;
-        socket.data.userId = userId;
-      }
-      //<TEST]
-
-      //const decoded = jwt.verify(token, config.jwtSecretKey!) as JwtPayload;
-      //socket.data.userId = decoded.userId;
+      const decoded = jwt.verify(token, config.jwtSecretKey!) as JwtPayload;
+      socket.data.userId = decoded.userId;
 
       const supabase = getSupabaseClient();
       const { data: planetRecord, error: dbError } = await supabase
         .from("user_planets")
         .select("id")
-        .eq("user_id", userId)
+        .eq("user_id", socket.data.userId)
         .maybeSingle();
 
       if (dbError || !planetRecord) {

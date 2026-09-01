@@ -26,13 +26,6 @@ export async function verifyHttpToken(
 
     const token = authHeader.split(" ")[1];
 
-    // [TEST>
-    if (token === "DEV_TEST_DUMMY_TOKEN_1234") {
-      request.userId = "49f0f5a6-60c6-4d17-9b4d-be148bb6f616"; // 테스트용 유저 ID 주입
-      return; // 검증 로직을 무사 통과시키고 종료
-    }
-    // <TEST]
-
     // 자체 JWT 검증 로직
     const decoded = jwt.verify(token, config.jwtSecretKey!) as JwtPayload;
 

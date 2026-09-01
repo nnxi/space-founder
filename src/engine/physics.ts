@@ -1,5 +1,5 @@
 import { config } from "../config";
-import { applyGravityTether } from "./gravity";
+import { applyGravityFromDefaultPlanets } from "./gravity";
 import type { Planet, WorldEvent } from "../types/planet";
 import type { PlanetStore } from "./store";
 import type { PlanetPersistenceAdapter } from "./world";
@@ -12,29 +12,39 @@ export function processPhysicsTick(
   const events: WorldEvent[] = [];
   const planets = store.getAllPlanets();
 
+  // 1단계: 유저 행성에 작용하는 모든 중력을 계산하여 속도(Velocity) 갱신
   for (const planet of planets.values()) {
-    // NASA 행성은 속도를 0으로 강제하고 위치 업데이트 생략
-    if ((planet as any).role == "default") {
+    if ((planet as any).role === "user") {
+      applyGravityFromDefaultPlanets(planet, planets, intervalSec);
+    }
+  }
+
+  // 2단계: 최신화된 속도를 적용하여 실제 위치 이동
+  for (const planet of planets.values()) {
+    // NASA 행성은 완전히 정지 상태 유지 및 연산 스킵
+    if ((planet as any).role === "default") {
       planet.velocity = { x: 0, y: 0, z: 0 };
       continue;
     }
 
-    // 1. 로컬 좌표에 속도 적용
+    // 유저 행성 좌표 이동
     planet.localPosition.x += planet.velocity.x * intervalSec;
     planet.localPosition.y += planet.velocity.y * intervalSec;
     planet.localPosition.z += planet.velocity.z * intervalSec;
 
-    // 2. 섹터 경계 초과 시 청크 인덱스 및 로컬 좌표 보정
-    normalizeChunkPosition(planet);
-
-    // 3. 중력 적용
-    applyGravityTether(planet, intervalSec);
-
-    // 중력 연산으로 인해 위치가 크게 변했을 수 있으므로 다시 한번 보정
+    // 이동 후 섹터 경계 초과 시 청크 인덱스 보정
     normalizeChunkPosition(planet);
 
     // 연산 완료 후 공간 해시 그리드에 갱신
     store.updateGrid(planet);
+
+    // 변경된 물리 상태를 DB에 저장
+    if (persistence) {
+      const numericId = store.getNumericId(planet.id);
+      if (numericId !== undefined) {
+        persistence.persistPlanet(planet, numericId);
+      }
+    }
   }
 
   return events;
