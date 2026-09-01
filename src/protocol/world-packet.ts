@@ -41,7 +41,7 @@ export function encodeWorldUpdatePacket(
 
   for (const planet of planets) {
     const numericId = resolveNumericId(planet.id) || 0;
-    const encodedId = (planet as any).role === "default" ? -numericId : numericId;
+    const encodedId = planet.role === "default" ? -numericId : numericId;
     
     // 32비트 부호 있는 정수로 변경하여 큰 ID 및 음수 허용
     buffer.writeInt32LE(encodedId, offset + WORLD_PACKET_PLANET_ID_OFFSET);

@@ -109,12 +109,14 @@ export function attachSocketServer(
     if (myPlanetNumericId !== null && myPlanetNumericId !== undefined) {
       let currentSector = { x: 0, y: 0, z: 0 };
 
-      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId, "user");
+      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
 
       if (myPlanetIdString) {
         const myPlanet = world.getPlanet(myPlanetIdString);
         if (myPlanet && myPlanet.chunkIndex) {
           currentSector = { ...myPlanet.chunkIndex };
+          
+          myPlanet.isOnline = true;
         } else {
           console.warn(`[Init Warning] Planet instance missing for ID string: ${myPlanetIdString}`);
         }
@@ -122,14 +124,34 @@ export function attachSocketServer(
         console.warn(`[Init Warning] Could not resolve string ID for numeric ID: ${myPlanetNumericId}`);
       }
 
-      // 내 행성의 정확한 최신 청크 섹터 좌표를 전달
       socket.emit("player:init", { 
         myPlanetId: myPlanetNumericId,
         currentSector: currentSector
       });
+
+      socket.on("disconnect", () => {
+        if (myPlanetIdString) {
+          const p = world.getPlanet(myPlanetIdString);
+          if (p) {
+            p.isOnline = false;
+          }
+        }
+      });
     }
 
-    // 다중 청크 구독 처리
+    // [중요] 비정상 종료 시에도 메모리 누수를 방지하기 위한 GC 로직
+    socket.on("disconnecting", () => {
+      for (const roomKey of socket.rooms) {
+        if (roomKey === socket.id) continue;
+        
+        const room = io.sockets.adapter.rooms.get(roomKey);
+        // 이 소켓이 나가면 0명이 될 예정인 방의 절차적 행성 정리
+        if (room && room.size === 1) {
+          world.clearProceduralPlanets(roomKey);
+        }
+      }
+    });
+
     socket.on("sector:subscribe_grid", (sectors: SectorIndices[]) => {
       if (!Array.isArray(sectors)) return;
       void updateSectorSubscriptions(socket, sectors, world);
@@ -143,7 +165,7 @@ export function attachSocketServer(
         return;
       }
 
-      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId, "user");
+      const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
 
       if (!myPlanetIdString) {
         callback?.({ ok: false, error: "Planet not found in world." });
@@ -156,7 +178,6 @@ export function attachSocketServer(
         return;
       }
 
-      // 내 행성의 최신 청크 인덱스와 로컬 좌표 전달
       callback?.({
         ok: true,
         chunkIndex: planet.chunkIndex,
@@ -187,7 +208,13 @@ export function broadcastSectorUpdates(
 
   for (const [roomId, planets] of groupedPlanets.entries()) {
     if (!roomId) continue;
-    const packet = encodeWorldUpdatePacket(planets, timestamp, resolveNumericId);
+    
+    // [중요] 물리 틱 업데이트 패킷 최적화: 이동하는 유저 행성만 필터링
+    const movingPlanets = planets.filter(p => p.role !== "default");
+    
+    if (movingPlanets.length === 0) continue;
+
+    const packet = encodeWorldUpdatePacket(movingPlanets, timestamp, resolveNumericId);
     io.to(roomId).emit("world:update", packet);
   }
 }
@@ -235,12 +262,16 @@ function broadcastAffectedSectorUpdates(
     const planets = world.getPlanetsInRoom(roomId);
     if (planets.length === 0) continue;
 
-    const packet = encodeWorldUpdatePacket(planets, timestamp, resolveNumericId);
+    // [중요] 이벤트 영향을 받은 룸 업데이트 시에도 정지된 절차적 행성은 전송 제외
+    const movingPlanets = planets.filter(p => p.role !== "default");
+    
+    if (movingPlanets.length === 0) continue;
+
+    const packet = encodeWorldUpdatePacket(movingPlanets, timestamp, resolveNumericId);
     io.to(roomId).emit("world:update", packet);
   }
 }
 
-// 다중 청크 구독 상태 동기화 및 입장/퇴장 처리
 async function updateSectorSubscriptions(
   socket: SpaceSocket,
   requestedSectors: SectorIndices[],
@@ -266,7 +297,8 @@ async function updateSectorSubscriptions(
     if (!currentSubscribed.has(roomKey)) {
       await socket.join(roomKey);
 
-      const planets = world.getPlanetsInRoom(roomKey);
+      const planets = world.getOrGeneratePlanetsInSector(roomKey, normalizedSector);
+      
       const staticPlanets = planets.map((planet) => {
         const p = planet as any;
         const numericId = world.getNumericPlanetId(planet.id) || 0;
@@ -274,7 +306,7 @@ async function updateSectorSubscriptions(
         return {
           planetId: numericId,
           planetName: p.name || planet.id || `Planet-${numericId}`,
-          userType: p.role || "default", // role 매핑 및 Fallback 보완
+          userType: p.role || "default",
           username: p.username || "Space Explorer",
           colorHex: p.colorHex || "#ffffff",
           planetType: p.planetType || "rocky",
@@ -289,18 +321,27 @@ async function updateSectorSubscriptions(
         staticPlanets 
       });
 
-      const packet = encodeWorldUpdatePacket(
-        planets,
-        Date.now(),
-        (planetId) => world.getNumericPlanetId(planetId),
-      );
-      socket.emit("world:update", packet);
+      // 방 진입 시 최초 1회는 이동 행성들의 위치를 보정해 주기 위해 필터링 후 패킷 전송
+      const movingPlanets = planets.filter(p => p.role !== "default");
+      if (movingPlanets.length > 0) {
+        const packet = encodeWorldUpdatePacket(
+          movingPlanets,
+          Date.now(),
+          (planetId) => world.getNumericPlanetId(planetId),
+        );
+        socket.emit("world:update", packet);
+      }
     }
   }
 
   for (const roomKey of currentSubscribed) {
     if (!newSubscribed.has(roomKey)) {
       await socket.leave(roomKey);
+
+      const room = socket.nsp.adapter.rooms.get(roomKey);
+      if (!room || room.size === 0) {
+        world.clearProceduralPlanets(roomKey);
+      }
     }
   }
 

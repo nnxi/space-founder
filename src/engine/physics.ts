@@ -1,5 +1,5 @@
 import { config } from "../config";
-import { applyGravityFromDefaultPlanets } from "./gravity";
+import { applyGravity } from "./gravity";
 import type { Planet, WorldEvent } from "../types/planet";
 import type { PlanetStore } from "./store";
 import type { PlanetPersistenceAdapter } from "./world";
@@ -12,33 +12,45 @@ export function processPhysicsTick(
   const events: WorldEvent[] = [];
   const planets = store.getAllPlanets();
 
-  // 1단계: 유저 행성에 작용하는 모든 중력을 계산하여 속도(Velocity) 갱신
+  // 1단계: 유저 행성에 작용하는 중력을 계산하여 속도 갱신
   for (const planet of planets.values()) {
-    if ((planet as any).role === "user") {
-      applyGravityFromDefaultPlanets(planet, planets, intervalSec);
+    // 절차적 행성은 중력 연산 대상이 아님
+    if (planet.role === "default") {
+      continue;
+    }
+
+    if (planet.role === "user") {
+      // 기획 반영: 유저가 자신의 행성을 관측 중이지 않으면 중력 작용 스킵
+      if (!planet.isOnline) {
+        continue;
+      }
+
+      applyGravity(planet, planets, intervalSec);
     }
   }
 
   // 2단계: 최신화된 속도를 적용하여 실제 위치 이동
   for (const planet of planets.values()) {
-    // NASA 행성은 완전히 정지 상태 유지 및 연산 스킵
-    if ((planet as any).role === "default") {
+    if (planet.role === "default") {
       planet.velocity = { x: 0, y: 0, z: 0 };
       continue;
     }
 
-    // 유저 행성 좌표 이동
+    if (planet.role === "user") {
+      // 기획 반영: 유저가 관측 중이지 않으면 물리적 이동 정지
+      if (!planet.isOnline) {
+        continue;
+      }
+    }
+
     planet.localPosition.x += planet.velocity.x * intervalSec;
     planet.localPosition.y += planet.velocity.y * intervalSec;
     planet.localPosition.z += planet.velocity.z * intervalSec;
 
-    // 이동 후 섹터 경계 초과 시 청크 인덱스 보정
     normalizeChunkPosition(planet);
 
-    // 연산 완료 후 공간 해시 그리드에 갱신
     store.updateGrid(planet);
 
-    // 변경된 물리 상태를 DB에 저장
     if (persistence) {
       const numericId = store.getNumericId(planet.id);
       if (numericId !== undefined) {

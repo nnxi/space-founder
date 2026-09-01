@@ -1,7 +1,7 @@
 import { config } from "../config";
 import { PlanetStore } from "./store";
 import { processPhysicsTick } from "./physics";
-import type { Planet, WarpRequest, WorldEvent } from "../types/planet";
+import type { Planet, PlanetType, WarpRequest, WorldEvent } from "../types/planet";
 import { getConstellationId } from "../utils/constellation";
 import type { SectorIndices } from "../types/sector";
 
@@ -32,13 +32,17 @@ export class WorldEngine {
     this.persistence = adapter;
   }
 
+  clearProceduralPlanets(roomId: string): void {
+    this.store.clearProceduralPlanetsInRoom(roomId);
+  }
+
+  // DB에 저장된 유저 데이터만 로드 (기존 NASA 행성 분산 로직 제거)
   hydrate(records: HydratablePlanet[]): void {
     this.store.clear();
 
     for (const { numericId, planet } of records) {
       const p = planet as any;
       
-      // 1. 깊은 복사 처리 (homeSector 제거 완료)
       const copy: Planet = {
         ...planet,
         chunkIndex: { ...planet.chunkIndex },
@@ -46,19 +50,6 @@ export class WorldEngine {
         velocity: { ...planet.velocity },
         satellites: p.satellites ? [...p.satellites] : [] 
       } as Planet;
-
-      // 2. 다중 행성 배치 로직 처리 (role 기준 검사)
-      if ((copy as any).role !== "user") {
-        const angle = numericId * 137.5 * (Math.PI / 180);
-        const spreadRadius = 25000 + numericId * 1500;
-
-        copy.localPosition.x += Math.cos(angle) * spreadRadius;
-        copy.localPosition.y += (Math.random() - 0.5) * 2000;
-        copy.localPosition.z += Math.sin(angle) * spreadRadius;
-
-        // 분산 배치 시 로컬 좌표가 청크 크기를 초과할 경우 보정
-        this.normalizeChunkPosition(copy);
-      }
 
       this.store.setPlanet(copy, numericId);
     }
@@ -96,12 +87,83 @@ export class WorldEngine {
     return numericId;
   }
 
-  getPlanetIdByNumericId(numericPlanetId: number, role: string = "user"): string | undefined {
-    return this.store.getPlanetIdByNumeric(numericPlanetId, role);
+  // 역할 분기 제거에 따른 파라미터 무효화 처리
+  getPlanetIdByNumericId(numericPlanetId: number, _role?: string): string | undefined {
+    return this.store.getPlanetIdByNumeric(numericPlanetId);
   }
 
   getPlanetsInRoom(roomId: string): Planet[] {
     return this.store.getPlanetsInRoom(roomId);
+  }
+
+  // 섹터 구독 시 호출: 행성이 없으면 시드 기반으로 절차적 생성
+  getOrGeneratePlanetsInSector(roomId: string, sector: SectorIndices): Planet[] {
+    const existingPlanets = this.store.getPlanetsInRoom(roomId);
+    const hasProceduralPlanets = existingPlanets.some(p => p.role === "default");
+
+    if (!hasProceduralPlanets) {
+      const seed = this.getSectorSeed(sector.x, sector.y, sector.z);
+      const rng = this.random(seed);
+      
+      const planetCount = Math.floor(rng() * 4); 
+
+      for (let i = 0; i < planetCount; i++) {
+        const proceduralPlanet: Planet = {
+          id: `proc_${roomId}_${i}`,
+          chunkIndex: { ...sector },
+          localPosition: {
+            x: rng() * config.sectorSize,
+            y: rng() * config.sectorSize,
+            z: rng() * config.sectorSize,
+          },
+          velocity: { x: 0, y: 0, z: 0 },
+          constellationId: getConstellationId(sector)
+        } as Planet;
+
+        proceduralPlanet.role = "default";
+        proceduralPlanet.planetType = this.getRandomPlanetType(rng);
+        proceduralPlanet.colorHex = this.getRandomColor(rng);
+        
+        // 유저의 DB 식별자와 충돌을 방지하기 위해 음수 ID 할당
+        const dummyNumericId = -(Math.abs(seed % 1000000) * 10 + i + 1);
+        
+        this.store.setPlanet(proceduralPlanet, dummyNumericId);
+        existingPlanets.push(proceduralPlanet);
+      }
+    }
+
+    return existingPlanets;
+  }
+
+  // 3차원 섹터 좌표를 단일 정수 해시 시드로 변환
+  private getSectorSeed(x: number, y: number, z: number): number {
+    let hash = 17;
+    hash = Math.imul(hash, 31) + x;
+    hash = Math.imul(hash, 31) + y;
+    hash = Math.imul(hash, 31) + z;
+    return hash;
+  }
+
+  // 결정론적 난수 생성기 (PRNG)
+  private random(seed: number): () => number {
+    let t = seed += 0x6D2B79F5;
+    return () => {
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  private getRandomPlanetType(rng: () => number): PlanetType {
+    const types: PlanetType[] = ["rocky", "gaseous", "icy", "lava", "star"];
+    return types[Math.floor(rng() * types.length)];
+  }
+
+  private getRandomColor(rng: () => number): string {
+    const r = Math.floor(rng() * 256).toString(16).padStart(2, '0');
+    const g = Math.floor(rng() * 256).toString(16).padStart(2, '0');
+    const b = Math.floor(rng() * 256).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
   }
 
   getAllRooms(): Map<string, Planet[]> {
@@ -109,7 +171,7 @@ export class WorldEngine {
   }
 
   summonPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId, "user");
+    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
     if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
 
     const planet = this.getPlanet(planetId);
@@ -133,7 +195,7 @@ export class WorldEngine {
   }
 
   warpPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId, "user");
+    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
     if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
 
     const planet = this.getPlanet(planetId);
@@ -183,25 +245,5 @@ export class WorldEngine {
   private persistPlanet(planet: Planet): void {
     if (!this.persistence) return;
     this.persistence.persistPlanet(planet, this.getNumericPlanetId(planet.id));
-  }
-
-  private normalizeChunkPosition(planet: Planet): void {
-    const deltaX = Math.floor(planet.localPosition.x / config.sectorSize);
-    if (deltaX !== 0) {
-      planet.chunkIndex.x += deltaX;
-      planet.localPosition.x -= deltaX * config.sectorSize;
-    }
-
-    const deltaY = Math.floor(planet.localPosition.y / config.sectorSize);
-    if (deltaY !== 0) {
-      planet.chunkIndex.y += deltaY;
-      planet.localPosition.y -= deltaY * config.sectorSize;
-    }
-
-    const deltaZ = Math.floor(planet.localPosition.z / config.sectorSize);
-    if (deltaZ !== 0) {
-      planet.chunkIndex.z += deltaZ;
-      planet.localPosition.z -= deltaZ * config.sectorSize;
-    }
   }
 }

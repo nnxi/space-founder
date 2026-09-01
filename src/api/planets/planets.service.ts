@@ -1,10 +1,11 @@
 import { getSupabaseClient } from "../../db/supabase";
 import type { WorldEngine } from "../../engine/world";
+import type { UserPlanetType } from "../../types/planet";
 
 export interface CreatePlanetDTO {
   name: string;
   constellationId: number;
-  planetType: "rocky" | "gaseous" | "icy";
+  planetType: UserPlanetType;
   colorHex: string;
 }
 

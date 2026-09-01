@@ -10,22 +10,6 @@ export interface SatelliteRow {
   orbit_inclination: number;
 }
 
-export interface NasaPlanetRow {
-  id: number;
-  name: string;
-  earth_radius?: number;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  constellation_id: number;
-  planet_type: string;
-  color_hex: string;
-  role: string;
-}
-
 export interface UserPlanetRow {
   id: number;
   user_id: string;
@@ -48,22 +32,17 @@ export interface UserPlanetRow {
 export class PlanetRepository implements PlanetPersistenceAdapter {
   constructor(private readonly supabase: SupabaseClient) {}
 
+  // 초기화 시 유저 행성 데이터만 로드
   async bootstrapWorld(world: WorldEngine): Promise<void> {
-    const [nasaRows, userRows] = await Promise.all([
-      this.fetchNasaPlanets(),
-      this.fetchUserPlanets()
-    ]);
-
-    const hydratablePlanets = [
-      ...nasaRows.map((row) => toHydratableNasa(row)),
-      ...userRows.map((row) => toHydratableUser(row))
-    ];
+    const userRows = await this.fetchUserPlanets();
+    const hydratablePlanets = userRows.map((row) => toHydratableUser(row));
 
     world.hydrate(hydratablePlanets);
   }
 
   persistPlanet(planet: Planet, numericId: number): void {
-    if ((planet as any).role === "default") {
+    // 절차적 생성 행성은 DB에 저장하지 않음
+    if (planet.role === "default") {
       return; 
     }
 
@@ -91,7 +70,8 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
       const rows: Partial<UserPlanetRow>[] = [];
 
       for (const planet of planets.values()) {
-        if ((planet as any).role === "default") {
+        // 절차적 생성 행성은 스냅샷 저장에서 제외
+        if (planet.role === "default") {
           continue;
         }
 
@@ -112,19 +92,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
     } catch (error) {
       console.error(`[SnapshotScheduler] Network request failed:`, error);
     }
-  }
-
-  private async fetchNasaPlanets(): Promise<NasaPlanetRow[]> {
-    const { data, error } = await this.supabase
-      .from("nasa_planets")
-      .select("id, name, earth_radius, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, role")
-      .order("id", { ascending: true });
-
-    if (error) {
-      throw new Error(`Failed to fetch NASA planets: ${error.message}`);
-    }
-
-    return (data ?? []) as NasaPlanetRow[];
   }
 
   private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
@@ -164,27 +131,6 @@ function toAbsoluteSpace(chunkIndex: { x: number, y: number, z: number }, localP
   };
 }
 
-function toHydratableNasa(row: NasaPlanetRow): { numericId: number; planet: Planet } {
-  const { chunkIndex, localPosition } = toChunkSpace(row.x, row.y, row.z);
-
-  return {
-    numericId: row.id,
-    planet: {
-      id: `nasa_${row.id}`, // 고유 식별 키
-      name: row.name, // 행성 표시 이름
-      chunkIndex,
-      localPosition,
-      velocity: { x: row.vx, y: row.vy, z: row.vz },
-      constellationId: row.constellation_id,
-      planetType: row.planet_type as any,
-      colorHex: row.color_hex,
-      radius: row.earth_radius ?? 1.0,
-      username: "NASA",
-      role: row.role || "default",
-    } as any,
-  };
-}
-
 function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Planet } {
   const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
   const username = profile?.username || "Space Explorer";
@@ -194,8 +140,8 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
   return {
     numericId: row.id,
     planet: {
-      id: `user_${row.id}`, // 고유 식별 키
-      name: row.name, // 행성 표시 이름
+      id: `user_${row.id}`,
+      name: row.name,
       chunkIndex,
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
@@ -217,7 +163,7 @@ function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetR
 
   const row: Partial<UserPlanetRow> = {
     id: numericId,
-    name: p.name || planet.id, // DB name 컬럼에는 행성 표시 이름 저장
+    name: p.name || planet.id,
     x: absPos.x || 0,
     y: absPos.y || 0,
     z: absPos.z || 0,
