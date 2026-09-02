@@ -96,6 +96,17 @@ export class WorldEngine {
     return this.store.getPlanetsInRoom(roomId);
   }
 
+  private generateAstronomicalName(rng: () => number): string {
+    const prefixes = ["Kepler", "Gliese", "JWT", "NGC", "HD", "LHS", "TRAPPIST", "K2"];
+    const prefix = prefixes[Math.floor(rng() * prefixes.length)];
+    const number = Math.floor(rng() * 900) + 100; // 100 ~ 999
+    const suffixChars = "bcdef";
+    const hasSuffix = rng() > 0.5;
+    const suffix = hasSuffix ? suffixChars[Math.floor(rng() * suffixChars.length)] : "";
+    
+    return `${prefix}-${number}${suffix}`;
+  }
+
   // 섹터 구독 시 호출: 행성이 없으면 시드 기반으로 절차적 생성
   getOrGeneratePlanetsInSector(roomId: string, sector: SectorIndices): Planet[] {
     const existingPlanets = this.store.getPlanetsInRoom(roomId);
@@ -105,7 +116,8 @@ export class WorldEngine {
       const seed = this.getSectorSeed(sector.x, sector.y, sector.z);
       const rng = this.random(seed);
       
-      const planetCount = Math.floor(rng() * 4); 
+      // 1. 밀도 감소: 기존 0~3개(rng() * 4)에서 0~2개(rng() * 3)로 최대치 하향
+      const planetCount = Math.floor(rng() * 3); 
 
       for (let i = 0; i < planetCount; i++) {
         const proceduralPlanet: Planet = {
@@ -123,6 +135,10 @@ export class WorldEngine {
         proceduralPlanet.role = "default";
         proceduralPlanet.planetType = this.getRandomPlanetType(rng);
         proceduralPlanet.colorHex = this.getRandomColor(rng);
+        
+        // 2. 무작위 천체 이름 할당
+        // (주의: Planet 타입 정의에 planetName 필드가 없다면 추가해야 합니다)
+        proceduralPlanet.name = this.generateAstronomicalName(rng);
         
         // 유저의 DB 식별자와 충돌을 방지하기 위해 음수 ID 할당
         const dummyNumericId = -(Math.abs(seed % 1000000) * 10 + i + 1);
@@ -155,8 +171,14 @@ export class WorldEngine {
   }
 
   private getRandomPlanetType(rng: () => number): PlanetType {
-    const types: PlanetType[] = ["rocky", "gaseous", "icy", "lava", "star"];
-    return types[Math.floor(rng() * types.length)];
+    const value = rng();
+
+    // 확률 구간 설정 (총합 1.0)
+    if (value < 0.25) return "rocky";
+    if (value < 0.50) return "icy";
+    if (value < 0.75) return "gaseous";
+    if (value < 0.875) return "lava";
+    return "star";
   }
 
   private getRandomColor(rng: () => number): string {
