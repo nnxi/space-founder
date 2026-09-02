@@ -311,7 +311,9 @@ async function updateSectorSubscriptions(
           colorHex: p.colorHex || "#ffffff",
           planetType: p.planetType || "rocky",
           constellationId: Number(p.constellationId) || numericId,
-          satellites: p.satellites || [] 
+          satellites: p.satellites || [],
+          chunkIndex: p.chunkIndex,
+          localPosition: p.localPosition
         };
       });
 

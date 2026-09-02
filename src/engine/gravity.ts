@@ -1,7 +1,7 @@
 import { config } from "../config";
 import type { Planet } from "../types/planet";
 
-const SOFTENING_CONSTANT = 100 * 100;
+const SOFTENING_CONSTANT = 1000 * 1000;
 
 // 함수명을 범용적으로 변경 (이제 모든 행성으로부터 중력을 받으므로)
 export function applyGravity(
