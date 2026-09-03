@@ -23,7 +23,7 @@ export async function createServer(world: WorldEngine): Promise<AppContext> {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
-    origin: true
+    origin: config.corsOrigin
   });
 
   // 유니티 WebGL 정적 파일 서빙 설정

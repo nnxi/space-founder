@@ -5,7 +5,7 @@ jspm_packages/
 # TypeScript build outputs
 dist/
 out/
-build/
+# build/
 
 # Logs
 logs
@@ -35,3 +35,6 @@ Thumbs.db
 *.sln
 *.sw?
 .aider*
+
+# Unity build files
+SpaceFounder_BurstDebugInformation_DoNotShip/
