@@ -1,8 +1,0 @@
--- Phase 5: warp system and constellation metadata
-
-ALTER TABLE public.planets
-  ADD COLUMN IF NOT EXISTS warp_authorized BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS home_sector_x INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS home_sector_y INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS home_sector_z INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS constellation_id INTEGER NOT NULL DEFAULT 0;
