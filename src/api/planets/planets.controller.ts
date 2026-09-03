@@ -41,7 +41,20 @@ export class PlanetController {
       return reply.status(201).send({ success: true, planetId: result.planetId });
       
     } catch (error: any) {
-      return reply.status(500).send({ error: error.message || "Internal server error" });
+      const errorMessage = error.message || "Internal server error";
+
+      // 행성 이름 중복 에러 처리
+      if (errorMessage.includes("Planet name already exists")) {
+        return reply.status(409).send({ error: errorMessage });
+      }
+
+      // 요청 데이터 유효성 검사 실패 시
+      if (errorMessage.includes("validation failed")) {
+        return reply.status(400).send({ error: errorMessage });
+      }
+
+      // 기타 데이터베이스 및 서버 내부 에러
+      return reply.status(500).send({ error: errorMessage });
     }
   }
 }

@@ -1,15 +1,16 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+import path from "path";
 import { registerPlanetRoutes } from "./api/planets/planets.routes";
 import { registerSatelliteRoutes } from "./api/satellites/satellites.routes";
-import { registerUserRoutes } from "./api/users/users.routes"
+import { registerUserRoutes } from "./api/users/users.routes";
 import type { WorldEngine } from "./engine/world";
 import { config } from "./config";
 import {
   attachSocketServer,
   broadcastSectorUpdates,
   handleTickEvents,
-  publishWorldEvents,
   type SpaceSocketServer,
 } from "./socket";
 
@@ -21,30 +22,27 @@ export interface AppContext {
 export async function createServer(world: WorldEngine): Promise<AppContext> {
   const app = Fastify({ logger: true });
 
-  // Cross-Origin Resource Sharing 차단 문제 해결을 위한 전역 허용 플러그인 등록
   await app.register(cors, {
     origin: true
   });
 
-  // 기본 헬스체크 라우트 등록
+  // 유니티 WebGL 정적 파일 서빙 설정
+  await app.register(fastifyStatic, {
+    root: path.join(process.cwd(), "public"),
+    prefix: "/", 
+  });
+
   app.get("/health", async () => ({
     status: "ok",
     planetCount: world.getPlanets().size,
   }));
 
-  // 행성 생성 HTTP API 라우트 등록
   registerPlanetRoutes(app, world);
-
-  // 위성 생성 HTTP API 라우트 등록
   registerSatelliteRoutes(app, world);
-
-  // 유저 관련 HTTP API
   registerUserRoutes(app);
 
-  // Fastify HTTP 서버 가동
-  await app.listen({ port: config.port, host: config.host });
+  await app.listen({ port: config.port, host: "0.0.0.0" });
 
-  // HTTP 서버 가동 완료 후 의존성 바인딩 및 물리 루프 가동
   const io = attachSocketServer(app.server, world);
 
   world.start((planets, events) => {

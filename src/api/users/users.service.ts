@@ -43,6 +43,26 @@ export class UserService {
   static async signup(data: SignupDTO) {
     const supabase = getSupabaseClient();
     
+    // Check for existing email and username concurrently
+    const [emailCheck, usernameCheck] = await Promise.all([
+      supabase.from("profiles").select("id").eq("email", data.email).maybeSingle(),
+      supabase.from("profiles").select("id").eq("username", data.username).maybeSingle()
+    ]);
+
+    if (emailCheck.error) {
+      throw new Error(`Email validation failed: ${emailCheck.error.message}`);
+    }
+    if (usernameCheck.error) {
+      throw new Error(`Username validation failed: ${usernameCheck.error.message}`);
+    }
+
+    if (emailCheck.data) {
+      throw new Error("Email is already in use. Please use a different email.");
+    }
+    if (usernameCheck.data) {
+      throw new Error("Username is already taken. Please choose another username.");
+    }
+
     const saltRounds = 10;
     const hashedPw = await bcrypt.hash(data.password, saltRounds);
     
@@ -62,7 +82,7 @@ export class UserService {
       .single();
 
     if (dbError) {
-      throw new Error(dbError.message);
+      throw new Error(`Database failed: ${dbError.message}`);
     }
 
     return newUser;

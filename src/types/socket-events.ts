@@ -10,6 +10,7 @@ export interface TrackMeAck {
 
 export interface ClientToServerEvents {
   "sector:subscribe_grid": (sectors: SectorIndices[]) => void;
+  "sector:unsubscribe_grid": (sectors: SectorIndices[]) => void;
   "planet:warp": (
     payload: WarpRequest,
     callback: (response: WarpAck) => void,

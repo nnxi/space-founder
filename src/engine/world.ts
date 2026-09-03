@@ -174,10 +174,10 @@ export class WorldEngine {
     const value = rng();
 
     // 확률 구간 설정 (총합 1.0)
-    if (value < 0.25) return "rocky";
-    if (value < 0.50) return "icy";
-    if (value < 0.75) return "gaseous";
-    if (value < 0.875) return "lava";
+    if (value < 0.27) return "rocky";
+    if (value < 0.54) return "icy";
+    if (value < 0.81) return "gaseous";
+    if (value < 0.92) return "lava";
     return "star";
   }
 

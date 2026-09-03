@@ -62,7 +62,6 @@ export function attachSocketServer(
     }
   });
 
-  // JWT 토큰 검증 및 행성 ID 세션 매핑
   io.use(async (socket, next) => {
     try {
       let token = socket.handshake.auth.token;
@@ -108,14 +107,12 @@ export function attachSocketServer(
 
     if (myPlanetNumericId !== null && myPlanetNumericId !== undefined) {
       let currentSector = { x: 0, y: 0, z: 0 };
-
       const myPlanetIdString = world.getPlanetIdByNumericId(myPlanetNumericId);
 
       if (myPlanetIdString) {
         const myPlanet = world.getPlanet(myPlanetIdString);
         if (myPlanet && myPlanet.chunkIndex) {
           currentSector = { ...myPlanet.chunkIndex };
-          
           myPlanet.isOnline = true;
         } else {
           console.warn(`[Init Warning] Planet instance missing for ID string: ${myPlanetIdString}`);
@@ -139,22 +136,27 @@ export function attachSocketServer(
       });
     }
 
-    // [중요] 비정상 종료 시에도 메모리 누수를 방지하기 위한 GC 로직
     socket.on("disconnecting", () => {
       for (const roomKey of socket.rooms) {
         if (roomKey === socket.id) continue;
         
         const room = io.sockets.adapter.rooms.get(roomKey);
-        // 이 소켓이 나가면 0명이 될 예정인 방의 절차적 행성 정리
         if (room && room.size === 1) {
           world.clearProceduralPlanets(roomKey);
         }
       }
     });
 
+    // 클라이언트의 명시적인 구독 요청 처리
     socket.on("sector:subscribe_grid", (sectors: SectorIndices[]) => {
       if (!Array.isArray(sectors)) return;
-      void updateSectorSubscriptions(socket, sectors, world);
+      void handleSubscribeSectors(socket, sectors, world);
+    });
+
+    // 클라이언트의 명시적인 구독 해제 요청 처리
+    socket.on("sector:unsubscribe_grid", (sectors: SectorIndices[]) => {
+      if (!Array.isArray(sectors)) return;
+      void handleUnsubscribeSectors(socket, sectors, world);
     });
 
     socket.on("camera:track_me", (_, callback) => {
@@ -209,9 +211,7 @@ export function broadcastSectorUpdates(
   for (const [roomId, planets] of groupedPlanets.entries()) {
     if (!roomId) continue;
     
-    // [중요] 물리 틱 업데이트 패킷 최적화: 이동하는 유저 행성만 필터링
     const movingPlanets = planets.filter(p => p.role !== "default");
-    
     if (movingPlanets.length === 0) continue;
 
     const packet = encodeWorldUpdatePacket(movingPlanets, timestamp, resolveNumericId);
@@ -262,9 +262,7 @@ function broadcastAffectedSectorUpdates(
     const planets = world.getPlanetsInRoom(roomId);
     if (planets.length === 0) continue;
 
-    // [중요] 이벤트 영향을 받은 룸 업데이트 시에도 정지된 절차적 행성은 전송 제외
     const movingPlanets = planets.filter(p => p.role !== "default");
-    
     if (movingPlanets.length === 0) continue;
 
     const packet = encodeWorldUpdatePacket(movingPlanets, timestamp, resolveNumericId);
@@ -272,13 +270,15 @@ function broadcastAffectedSectorUpdates(
   }
 }
 
-async function updateSectorSubscriptions(
+// 분리된 구독 함수
+async function handleSubscribeSectors(
   socket: SpaceSocket,
   requestedSectors: SectorIndices[],
   world: WorldEngine,
 ): Promise<void> {
-  const currentSubscribed = socket.data.subscribedSectors || new Set<string>();
-  const newSubscribed = new Set<string>();
+  if (!socket.data.subscribedSectors) {
+    socket.data.subscribedSectors = new Set<string>();
+  }
 
   for (const sector of requestedSectors) {
     const normalizedSector: SectorIndices = {
@@ -287,57 +287,74 @@ async function updateSectorSubscriptions(
       z: typeof sector?.z === "string" ? parseInt(sector.z, 10) : Number(sector?.z || 0),
     };
 
-    if (isNaN(normalizedSector.x) || isNaN(normalizedSector.y) || isNaN(normalizedSector.z)) {
-      continue;
-    }
+    if (isNaN(normalizedSector.x) || isNaN(normalizedSector.y) || isNaN(normalizedSector.z)) continue;
 
     const roomKey = getSectorRoomId(normalizedSector);
-    newSubscribed.add(roomKey);
 
-    if (!currentSubscribed.has(roomKey)) {
-      await socket.join(roomKey);
+    if (socket.data.subscribedSectors.has(roomKey)) continue;
 
-      const planets = world.getOrGeneratePlanetsInSector(roomKey, normalizedSector);
+    socket.data.subscribedSectors.add(roomKey);
+    await socket.join(roomKey);
+
+    const planets = world.getOrGeneratePlanetsInSector(roomKey, normalizedSector);
+    
+    const staticPlanets = planets.map((planet) => {
+      const p = planet as any;
+      const numericId = world.getNumericPlanetId(planet.id) || 0;
       
-      const staticPlanets = planets.map((planet) => {
-        const p = planet as any;
-        const numericId = world.getNumericPlanetId(planet.id) || 0;
-        
-        return {
-          planetId: numericId,
-          planetName: p.name || planet.id || `Planet-${numericId}`,
-          userType: p.role || "default",
-          username: p.username || "Space Explorer",
-          colorHex: p.colorHex || "#ffffff",
-          planetType: p.planetType || "rocky",
-          constellationId: Number(p.constellationId) || numericId,
-          satellites: p.satellites || [],
-          chunkIndex: p.chunkIndex,
-          localPosition: p.localPosition
-        };
-      });
+      return {
+        planetId: numericId,
+        planetName: p.name || planet.id || `Planet-${numericId}`,
+        userType: p.role || "default",
+        username: p.username || "Space Explorer",
+        colorHex: p.colorHex || "#ffffff",
+        planetType: p.planetType || "rocky",
+        constellationId: Number(p.constellationId) || numericId,
+        satellites: p.satellites || [],
+        chunkIndex: p.chunkIndex,
+        localPosition: p.localPosition
+      };
+    });
 
-      socket.emit("sector:joined", { 
-        room: roomKey, 
-        sector: normalizedSector,
-        staticPlanets 
-      });
+    socket.emit("sector:joined", { 
+      room: roomKey, 
+      sector: normalizedSector,
+      staticPlanets 
+    });
 
-      // 방 진입 시 최초 1회는 이동 행성들의 위치를 보정해 주기 위해 필터링 후 패킷 전송
-      const movingPlanets = planets.filter(p => p.role !== "default");
-      if (movingPlanets.length > 0) {
-        const packet = encodeWorldUpdatePacket(
-          movingPlanets,
-          Date.now(),
-          (planetId) => world.getNumericPlanetId(planetId),
-        );
-        socket.emit("world:update", packet);
-      }
+    const movingPlanets = planets.filter(p => p.role !== "default");
+    if (movingPlanets.length > 0) {
+      const packet = encodeWorldUpdatePacket(
+        movingPlanets,
+        Date.now(),
+        (planetId) => world.getNumericPlanetId(planetId),
+      );
+      socket.emit("world:update", packet);
     }
   }
+}
 
-  for (const roomKey of currentSubscribed) {
-    if (!newSubscribed.has(roomKey)) {
+// 새롭게 추가된 구독 해제 함수
+async function handleUnsubscribeSectors(
+  socket: SpaceSocket,
+  requestedSectors: SectorIndices[],
+  world: WorldEngine,
+): Promise<void> {
+  if (!socket.data.subscribedSectors) return;
+
+  for (const sector of requestedSectors) {
+    const normalizedSector: SectorIndices = {
+      x: typeof sector?.x === "string" ? parseInt(sector.x, 10) : Number(sector?.x || 0),
+      y: typeof sector?.y === "string" ? parseInt(sector.y, 10) : Number(sector?.y || 0),
+      z: typeof sector?.z === "string" ? parseInt(sector.z, 10) : Number(sector?.z || 0),
+    };
+
+    if (isNaN(normalizedSector.x) || isNaN(normalizedSector.y) || isNaN(normalizedSector.z)) continue;
+
+    const roomKey = getSectorRoomId(normalizedSector);
+
+    if (socket.data.subscribedSectors.has(roomKey)) {
+      socket.data.subscribedSectors.delete(roomKey);
       await socket.leave(roomKey);
 
       const room = socket.nsp.adapter.rooms.get(roomKey);
@@ -346,6 +363,4 @@ async function updateSectorSubscriptions(
       }
     }
   }
-
-  socket.data.subscribedSectors = newSubscribed;
 }

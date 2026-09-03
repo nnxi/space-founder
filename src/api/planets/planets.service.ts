@@ -31,6 +31,19 @@ export class PlanetService {
   static async createPlanet(userId: string, data: CreatePlanetDTO, world: WorldEngine) {
     const supabase = getSupabaseClient();
 
+    // 행성 이름 중복 검사
+    const planetName = data.name.trim();
+
+    // 행성 이름 중복 검사
+    const { data: existingPlanet, error: nameCheckError } = await supabase
+      .from("user_planets")
+      .select("id")
+      .eq("name", planetName)
+      .maybeSingle();
+
+    if (nameCheckError) throw new Error(`Name validation failed: ${nameCheckError.message}`);
+    if (existingPlanet) throw new Error("Planet name already exists. Please choose another name.");
+
     const radius = 5000 + Math.random() * 15000;
     const theta = Math.random() * Math.PI * 2;
     const x = radius * Math.cos(theta);

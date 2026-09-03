@@ -23,6 +23,7 @@
   "homepage": "https://github.com/nnxi/space-founder#readme",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^10.1.3",
     "@supabase/supabase-js": "^2.107.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",

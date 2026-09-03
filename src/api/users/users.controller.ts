@@ -35,11 +35,25 @@ export class UserController {
       return reply.status(201).send({ success: true, user: newUser });
       
     } catch (error: any) {
-      // 중복 이메일 등 DB 제약조건 위반 시 처리
-      if (error.message.includes("duplicate key")) {
-        return reply.status(409).send({ error: "Email already exists" });
+      const errorMessage = error.message || "Internal server error";
+
+      // 이메일 중복 에러 처리
+      if (errorMessage.includes("Email is already in use")) {
+        return reply.status(409).send({ error: errorMessage });
       }
-      return reply.status(500).send({ error: error.message || "Internal server error" });
+
+      // 유저네임 중복 에러 처리
+      if (errorMessage.includes("Username is already taken")) {
+        return reply.status(409).send({ error: errorMessage });
+      }
+
+      // DB 조회 중 발생한 유효성 에러 처리
+      if (errorMessage.includes("validation failed")) {
+        return reply.status(400).send({ error: errorMessage });
+      }
+
+      // 기타 서버 에러
+      return reply.status(500).send({ error: errorMessage });
     }
   }
 
