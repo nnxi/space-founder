@@ -34,7 +34,6 @@ export async function createServer(world: WorldEngine): Promise<AppContext> {
 
   app.get("/health", async () => ({
     status: "ok",
-    planetCount: world.getPlanets().size,
   }));
 
   registerPlanetRoutes(app, world);
