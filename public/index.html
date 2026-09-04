@@ -10,6 +10,8 @@
     <link rel="icon" type="image/svg+xml" href="TemplateData/favicon-dark.svg" media="(prefers-color-scheme: dark)">
     
     <link rel="stylesheet" href="TemplateData/style.css">
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
     <!-- 브라우저 전체 화면 적용 및 기본 UI 숨김 처리 -->
     <style>
@@ -109,6 +111,7 @@
         createUnityInstance(canvas, config, (progress) => {
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
         }).then((unityInstance) => {
+          window.unityInstance = unityInstance;
           document.querySelector("#unity-loading-bar").style.display = "none";
           document.querySelector("#unity-fullscreen-button").onclick = () => {
             unityInstance.SetFullscreen(1);
