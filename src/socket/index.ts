@@ -112,6 +112,7 @@ export function attachSocketServer(
       if (myPlanetIdString) {
         const myPlanet = world.getPlanet(myPlanetIdString);
         if (myPlanet && myPlanet.chunkIndex) {
+          console.log(`[Debug] Planet ID ${myPlanetNumericId} chunkIndex:`, myPlanet.chunkIndex);
           currentSector = { ...myPlanet.chunkIndex };
           myPlanet.isOnline = true;
         } else {
