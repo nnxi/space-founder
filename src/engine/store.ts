@@ -1,4 +1,5 @@
 import type { Planet } from "../types/planet";
+import type { SectorIndices } from "../types/sector";
 import { SpatialGrid } from "../utils/sector";
 
 // 행성 데이터와 공간 해시 그리드를 통합 관리하는 상태 저장소
@@ -89,6 +90,10 @@ export class PlanetStore {
 
   getPlanetsInRoom(roomId: string): Planet[] {
     return this.grid.getPlanetsInRoom(roomId);
+  }
+
+  getPlanetsNear(center: SectorIndices): Planet[] {
+    return this.grid.getPlanetsNear(center);
   }
 
   getAllRooms(): Map<string, Planet[]> {

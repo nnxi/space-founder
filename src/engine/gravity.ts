@@ -1,13 +1,22 @@
 import { config } from "../config";
-import type { Planet } from "../types/planet";
+import type { Planet, PlanetType } from "../types/planet";
 
 const SOFTENING_CONSTANT = 1000 * 1000;
 const REPULSION_THRESHOLD = 3000;
 const REPULSION_MULTIPLIER = 5;
 
+// 중력을 끌어당기는(영향을 주는) 쪽 천체의 타입별 질량 계수
+const MASS_BY_TYPE: Record<PlanetType, number> = {
+  star: 10,
+  gaseous: 3,
+  rocky: 1,
+  icy: 1,
+  lava: 1,
+};
+
 export function applyGravity(
   targetPlanet: Planet,
-  allPlanets: ReadonlyMap<string, Planet>,
+  nearbyPlanets: readonly Planet[],
   tickIntervalSec: number
 ): void {
   if (targetPlanet.role === "default") {
@@ -16,16 +25,8 @@ export function applyGravity(
 
   const maxDistSq = config.gravityMaxDistance * config.gravityMaxDistance;
 
-  for (const other of allPlanets.values()) {
+  for (const other of nearbyPlanets) {
     if (other.id === targetPlanet.id) {
-      continue;
-    }
-
-    const sectorDistX = Math.abs(other.chunkIndex.x - targetPlanet.chunkIndex.x);
-    const sectorDistY = Math.abs(other.chunkIndex.y - targetPlanet.chunkIndex.y);
-    const sectorDistZ = Math.abs(other.chunkIndex.z - targetPlanet.chunkIndex.z);
-    
-    if (sectorDistX > 1 || sectorDistY > 1 || sectorDistZ > 1) {
       continue;
     }
 
@@ -50,7 +51,7 @@ export function applyGravity(
       currentStrength = config.gravityPullStrength * REPULSION_MULTIPLIER;
     }
 
-    const pullForce = (currentStrength / effectiveDistSq) * forceDirection;
+    const pullForce = (currentStrength * MASS_BY_TYPE[other.planetType] / effectiveDistSq) * forceDirection;
 
     targetPlanet.velocity.x += (dx / distance) * pullForce * tickIntervalSec;
     targetPlanet.velocity.y += (dy / distance) * pullForce * tickIntervalSec;

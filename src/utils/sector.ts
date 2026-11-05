@@ -60,6 +60,24 @@ export class SpatialGrid {
     return room ? Array.from(room.values()) : [];
   }
 
+  // 중심 청크와 인접 26개 청크(3x3x3)의 행성을 한 배열로 반환 (중심 청크 포함)
+  getPlanetsNear(center: SectorIndices): Planet[] {
+    const result: Planet[] = [];
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const room = this.grid.get(
+            getSectorRoomId({ x: center.x + dx, y: center.y + dy, z: center.z + dz }),
+          );
+          if (room) result.push(...room.values());
+        }
+      }
+    }
+
+    return result;
+  }
+
   getAllRooms(): Map<string, Planet[]> {
     const result = new Map<string, Planet[]>();
     for (const [roomId, roomMap] of this.grid.entries()) {

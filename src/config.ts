@@ -25,8 +25,9 @@ export const config = {
   snapshotIntervalMs: Number(process.env.SNAPSHOT_INTERVAL_MS) || 60 * 1000,
   constellationCount: 12,
   gravityTetherRadius: 35_000,
-  gravityMaxDistance: 45_000,
-  gravityPullStrength: 1_000_000_000,
+  // sectorSize 이하여야 3x3x3 인접 청크 조회만으로 유효 거리 안의 행성을 빠짐없이 포함함
+  gravityMaxDistance: 100_000,
+  gravityPullStrength: 5_000_000_000,
   supabase: {
     url: normalizeSupabaseUrl(requiredEnv("SUPABASE_URL")),
     key:

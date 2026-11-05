@@ -17,9 +17,9 @@ export function processPhysicsTick(
     if (planet) activePlanets.push(planet);
   }
 
-  // 1단계: 활성 행성에 작용하는 중력을 계산하여 속도 갱신
+  // 1단계: 활성 행성에 작용하는 중력을 계산하여 속도 갱신 (3x3x3 인접 청크만 조회)
   for (const planet of activePlanets) {
-    applyGravity(planet, planets, intervalSec);
+    applyGravity(planet, store.getPlanetsNear(planet.chunkIndex), intervalSec);
   }
 
   // 2단계: 최신화된 속도를 적용하여 실제 위치 이동
