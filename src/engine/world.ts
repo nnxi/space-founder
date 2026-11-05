@@ -1,7 +1,7 @@
 import { config } from "../config";
 import { PlanetStore } from "./store";
 import { processPhysicsTick } from "./physics";
-import type { Planet, PlanetType, WarpRequest, WorldEvent } from "../types/planet";
+import type { Planet, PlanetType, WorldEvent } from "../types/planet";
 import { getConstellationId } from "../utils/constellation";
 import type { SectorIndices } from "../types/sector";
 
@@ -21,8 +21,6 @@ export type TickCallback = (
 ) => void;
 
 const TICK_INTERVAL_SEC = config.physicsTickIntervalMs / 1000;
-const CORE_SECTOR: SectorIndices = { x: 0, y: 0, z: 0 };
-const PLAYER_SUMMON_POSITION = { x: 500, y: 500, z: 500 };
 
 export class WorldEngine {
   private readonly store = new PlanetStore();
@@ -218,78 +216,6 @@ export class WorldEngine {
 
   getAllRooms(): Map<string, Planet[]> {
     return this.store.getAllRooms();
-  }
-
-  summonPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
-    if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
-
-    const planet = this.getPlanet(planetId);
-    if (!planet) throw new Error(`Planet not found: ${planetId}`);
-
-    const fromSector = { ...planet.chunkIndex };
-
-    planet.chunkIndex = { ...CORE_SECTOR };
-    planet.localPosition = { ...PLAYER_SUMMON_POSITION };
-    planet.velocity = { x: 0, y: 0, z: 0 };
-    planet.constellationId = getConstellationId(CORE_SECTOR);
-
-    this.persistPlanet(planet);
-
-    return {
-      type: "warp",
-      planetId: planet.id,
-      fromSector,
-      toSector: CORE_SECTOR,
-    };
-  }
-
-  warpPlanetByNumericId(numericPlanetId: number): WorldEvent {
-    const planetId = this.getPlanetIdByNumericId(numericPlanetId);
-    if (!planetId) throw new Error(`Unknown numeric id: ${numericPlanetId}`);
-
-    const planet = this.getPlanet(planetId);
-    if (!planet) throw new Error(`Planet not found: ${planetId}`);
-
-    const sector = { ...planet.chunkIndex };
-
-    this.persistPlanet(planet);
-
-    return {
-      type: "warp",
-      planetId: planet.id,
-      fromSector: sector,
-      toSector: sector,
-    };
-  }
-
-  warpPlanet(request: WarpRequest): WorldEvent {
-    const planet = this.getPlanet(request.planetId);
-    if (!planet) throw new Error(`Unknown planet id: ${request.planetId}`);
-
-    const fromSector = { ...planet.chunkIndex };
-    const targetSector: SectorIndices = {
-      x: request.targetSectorX,
-      y: request.targetSectorY,
-      z: request.targetSectorZ,
-    };
-
-    planet.chunkIndex = { ...targetSector };
-    planet.localPosition = {
-      x: Math.random() * config.sectorSize,
-      y: Math.random() * config.sectorSize,
-      z: Math.random() * config.sectorSize,
-    };
-    planet.constellationId = getConstellationId(targetSector);
-
-    this.persistPlanet(planet);
-
-    return {
-      type: "warp",
-      planetId: planet.id,
-      fromSector,
-      toSector: targetSector,
-    };
   }
 
   private persistPlanet(planet: Planet): void {

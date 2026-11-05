@@ -4,7 +4,6 @@ import type {
   PlanetType,
   Satellite,
   Vec3,
-  WarpRequest,
   WorldEvent,
 } from "./planet";
 
@@ -31,21 +30,10 @@ export interface StaticPlanetInfo {
 export interface ClientToServerEvents {
   "sector:subscribe_grid": (sectors: SectorIndices[]) => void;
   "sector:unsubscribe_grid": (sectors: SectorIndices[]) => void;
-  "planet:warp": (
-    payload: WarpRequest,
-    callback: (response: WarpAck) => void,
-  ) => void;
-  "cheat:summon_me": (targetSector: SectorIndices) => void;
   "camera:track_me": (
     payload?: { planetId?: number },
     callback?: (response: TrackMeAck) => void
   ) => void;
-}
-
-export interface WarpAck {
-  ok: boolean;
-  error?: string;
-  event?: WorldEvent;
 }
 
 export interface PlayerInitPayload {

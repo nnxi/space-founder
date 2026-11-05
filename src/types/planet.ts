@@ -46,14 +46,7 @@ export interface Planet {
   satellites?: Satellite[];
 }
 
-export interface WarpRequest {
-  planetId: string;
-  targetSectorX: number;
-  targetSectorY: number;
-  targetSectorZ: number;
-}
-
-export type WorldEventType = "rebirth" | "warp";
+export type WorldEventType = "rebirth";
 
 export interface WorldEvent {
   type: WorldEventType;

@@ -114,20 +114,7 @@ export function attachSocketServer(
     }
 
     // 정상/비정상(브라우저 종료, ping timeout) 종료 모두 disconnect로 들어옴
-    socket.on("disconnect", () => {
-      for (const roomKey of socket.data.subscribedSectors ?? []) {
-        world.releaseSector(roomKey);
-      }
-      socket.data.subscribedSectors?.clear();
-
-      if (
-        myPlanetNumericId !== null &&
-        myPlanetNumericId !== undefined &&
-        !io.sockets.adapter.rooms.has(getUserRoomId(myPlanetNumericId))
-      ) {
-        world.unloadUserPlanet(myPlanetNumericId);
-      }
-    });
+    socket.on("disconnect", () => handleDisconnect(io, socket, world));
 
     // 클라이언트의 명시적인 구독 요청 처리
     socket.on("sector:subscribe_grid", (sectors: SectorIndices[]) => {
@@ -173,15 +160,6 @@ export function attachSocketServer(
   return io;
 }
 
-export function publishWorldEvents(
-  io: SpaceSocketServer,
-  world: WorldEngine,
-  events: WorldEvent[],
-): void {
-  emitWorldEvents(io, events);
-  broadcastAffectedSectorUpdates(io, world, events);
-}
-
 export function broadcastSectorUpdates(
   io: SpaceSocketServer,
   world: WorldEngine,
@@ -191,7 +169,8 @@ export function broadcastSectorUpdates(
   const resolveNumericId = (planetId: string) => world.getNumericPlanetId(planetId);
 
   for (const [roomId, planets] of groupedPlanets.entries()) {
-    if (!roomId) continue;
+    // 접속자가 없는 방은 패킷 인코딩/전송을 건너뜀
+    if (!roomId || !io.sockets.adapter.rooms.has(roomId)) continue;
     
     const movingPlanets = planets.filter(p => p.role !== "default");
     if (movingPlanets.length === 0) continue;
@@ -223,32 +202,23 @@ function emitWorldEvents(
   }
 }
 
-function broadcastAffectedSectorUpdates(
+// 소켓이 어떤 경로로 끊기든 구독 섹터 반환 + 내 행성 저장/언로드를 한 곳에서 처리
+function handleDisconnect(
   io: SpaceSocketServer,
+  socket: SpaceSocket,
   world: WorldEngine,
-  events: WorldEvent[],
 ): void {
-  const affectedRooms = new Set<string>();
-
-  for (const event of events) {
-    affectedRooms.add(getSectorRoomId(event.fromSector));
-    affectedRooms.add(getSectorRoomId(event.toSector));
+  for (const roomKey of socket.data.subscribedSectors ?? []) {
+    world.releaseSector(roomKey);
   }
+  socket.data.subscribedSectors?.clear();
 
-  const timestamp = Date.now();
-  const resolveNumericId = (planetId: string) => world.getNumericPlanetId(planetId);
+  const myPlanetId = socket.data.myPlanetId;
+  if (myPlanetId === null || myPlanetId === undefined) return;
 
-  for (const roomId of affectedRooms) {
-    if (!roomId) continue;
-    
-    const planets = world.getPlanetsInRoom(roomId);
-    if (planets.length === 0) continue;
-
-    const movingPlanets = planets.filter(p => p.role !== "default");
-    if (movingPlanets.length === 0) continue;
-
-    const packet = encodeWorldUpdatePacket(movingPlanets, timestamp, resolveNumericId);
-    io.to(roomId).emit("world:update", packet);
+  // 같은 유저의 다른 탭이 남아 있으면 행성을 유지
+  if (!io.sockets.adapter.rooms.has(getUserRoomId(myPlanetId))) {
+    world.unloadUserPlanet(myPlanetId);
   }
 }
 
