@@ -12,6 +12,7 @@ export interface HydratablePlanet {
 
 export interface PlanetPersistenceAdapter {
   persistPlanet(planet: Planet, numericId: number): void;
+  loadUserPlanet(userId: string): Promise<HydratablePlanet | null>;
 }
 
 export type TickCallback = (
@@ -28,38 +29,48 @@ export class WorldEngine {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private persistence: PlanetPersistenceAdapter | null = null;
 
+  // 섹터별 구독자 수. 0 -> 1에서 절차적 행성 생성, 1 -> 0에서 메모리 해제
+  private readonly sectorRefCounts = new Map<string, number>();
+
   setPersistenceAdapter(adapter: PlanetPersistenceAdapter): void {
     this.persistence = adapter;
   }
 
-  clearProceduralPlanets(roomId: string): void {
-    this.store.clearProceduralPlanetsInRoom(roomId);
+  // 단일 행성을 월드에 추가 (월드 전체를 다시 로드하지 않음)
+  addPlanet(planet: Planet, numericId: number): void {
+    this.store.setPlanet(planet, numericId);
   }
 
-  // DB에 저장된 유저 데이터만 로드 (기존 NASA 행성 분산 로직 제거)
-  hydrate(records: HydratablePlanet[]): void {
-    this.store.clear();
+  // 소켓 접속 시: 내 행성만 DB에서 로드해 메모리에 올리고 물리 연산 대상으로 활성화
+  async loadUserPlanet(userId: string): Promise<number | null> {
+    const record = await this.persistence?.loadUserPlanet(userId);
+    if (!record) return null;
 
-    for (const { numericId, planet } of records) {
-      const p = planet as any;
-      
-      const copy: Planet = {
-        ...planet,
-        chunkIndex: { ...planet.chunkIndex },
-        localPosition: { ...planet.localPosition },
-        velocity: { ...planet.velocity },
-        satellites: p.satellites ? [...p.satellites] : [] 
-      } as Planet;
-
-      this.store.setPlanet(copy, numericId);
+    // 이미 메모리에 있으면(다중 탭, 생성 직후 접속) 재사용
+    if (!this.store.getPlanetIdByNumeric(record.numericId)) {
+      this.addPlanet(record.planet, record.numericId);
     }
+
+    const planetId = this.store.getPlanetIdByNumeric(record.numericId)!;
+    this.store.activate(planetId);
+    return record.numericId;
+  }
+
+  // 소켓 완전 해제 시: 마지막 위치를 저장하고 메모리에서 내림
+  unloadUserPlanet(numericId: number): void {
+    const planetId = this.store.getPlanetIdByNumeric(numericId);
+    const planet = planetId && this.store.getPlanet(planetId);
+    if (!planet) return;
+
+    this.persistPlanet(planet);
+    this.store.removePlanet(planet.id);
   }
 
   start(onAfterTick?: TickCallback): void {
     if (this.tickTimer) return;
 
     this.tickTimer = setInterval(() => {
-      const events = processPhysicsTick(this.store, TICK_INTERVAL_SEC, this.persistence);
+      const events = processPhysicsTick(this.store, TICK_INTERVAL_SEC);
       onAfterTick?.(this.store.getAllPlanets(), events);
     }, config.physicsTickIntervalMs);
   }
@@ -107,48 +118,65 @@ export class WorldEngine {
     return `${prefix}-${number}${suffix}`;
   }
 
-  // 섹터 구독 시 호출: 행성이 없으면 시드 기반으로 절차적 생성
-  getOrGeneratePlanetsInSector(roomId: string, sector: SectorIndices): Planet[] {
-    const existingPlanets = this.store.getPlanetsInRoom(roomId);
-    const hasProceduralPlanets = existingPlanets.some(p => p.role === "default");
+  // 섹터 구독 시 호출(소켓당 섹터 1회): 첫 구독자일 때만 시드 기반으로 절차적 생성
+  acquireSector(roomId: string, sector: SectorIndices): Planet[] {
+    const count = this.sectorRefCounts.get(roomId) ?? 0;
+    this.sectorRefCounts.set(roomId, count + 1);
 
-    if (!hasProceduralPlanets) {
-      const seed = this.getSectorSeed(sector.x, sector.y, sector.z);
-      const rng = this.random(seed);
-      
-      // 1. 밀도 감소: 기존 0~3개(rng() * 4)에서 0~2개(rng() * 3)로 최대치 하향
-      const planetCount = Math.floor(rng() * 3); 
-
-      for (let i = 0; i < planetCount; i++) {
-        const proceduralPlanet: Planet = {
-          id: `proc_${roomId}_${i}`,
-          chunkIndex: { ...sector },
-          localPosition: {
-            x: rng() * config.sectorSize,
-            y: rng() * config.sectorSize,
-            z: rng() * config.sectorSize,
-          },
-          velocity: { x: 0, y: 0, z: 0 },
-          constellationId: getConstellationId(sector)
-        } as Planet;
-
-        proceduralPlanet.role = "default";
-        proceduralPlanet.planetType = this.getRandomPlanetType(rng);
-        proceduralPlanet.colorHex = this.getRandomColor(rng);
-        
-        // 2. 무작위 천체 이름 할당
-        // (주의: Planet 타입 정의에 planetName 필드가 없다면 추가해야 합니다)
-        proceduralPlanet.name = this.generateAstronomicalName(rng);
-        
-        // 유저의 DB 식별자와 충돌을 방지하기 위해 음수 ID 할당
-        const dummyNumericId = -(Math.abs(seed % 1000000) * 10 + i + 1);
-        
-        this.store.setPlanet(proceduralPlanet, dummyNumericId);
-        existingPlanets.push(proceduralPlanet);
-      }
+    if (count === 0) {
+      this.generateProceduralPlanets(roomId, sector);
     }
 
-    return existingPlanets;
+    return this.store.getPlanetsInRoom(roomId);
+  }
+
+  // 섹터 구독 해제 시 호출: 마지막 구독자가 나가면 절차적 행성을 메모리에서 내림
+  releaseSector(roomId: string): void {
+    const count = this.sectorRefCounts.get(roomId);
+    if (count === undefined) return;
+
+    if (count > 1) {
+      this.sectorRefCounts.set(roomId, count - 1);
+      return;
+    }
+
+    this.sectorRefCounts.delete(roomId);
+    this.store.clearProceduralPlanetsInRoom(roomId);
+  }
+
+  private generateProceduralPlanets(roomId: string, sector: SectorIndices): void {
+    const seed = this.getSectorSeed(sector.x, sector.y, sector.z);
+    const rng = this.random(seed);
+    
+    // 1. 밀도 감소: 기존 0~3개(rng() * 4)에서 0~2개(rng() * 3)로 최대치 하향
+    const planetCount = Math.floor(rng() * 3); 
+
+    for (let i = 0; i < planetCount; i++) {
+      // 객체 리터럴은 위에서 아래로 평가되므로 rng 호출 순서(위치→타입→색→이름)를 바꾸면 시드 결과가 달라짐
+      const proceduralPlanet: Planet = {
+        id: `proc_${roomId}_${i}`,
+        chunkIndex: { ...sector },
+        localPosition: {
+          x: rng() * config.sectorSize,
+          y: rng() * config.sectorSize,
+          z: rng() * config.sectorSize,
+        },
+        velocity: { x: 0, y: 0, z: 0 },
+        constellationId: getConstellationId(sector),
+        radius: 1.0,
+        planetType: this.getRandomPlanetType(rng),
+        colorHex: this.getRandomColor(rng),
+        name: this.generateAstronomicalName(rng),
+        username: "Space Explorer",
+        role: "default",
+        satellites: [],
+      };
+      
+      // 유저의 DB 식별자와 충돌을 방지하기 위해 음수 ID 할당
+      const dummyNumericId = -(Math.abs(seed % 1000000) * 10 + i + 1);
+      
+      this.store.setPlanet(proceduralPlanet, dummyNumericId);
+    }
   }
 
   // 3차원 섹터 좌표를 단일 정수 해시 시드로 변환

@@ -43,7 +43,6 @@ export interface Planet {
   
   // 상태 및 하위 객체
   role: PlanetRole;
-  isOnline?: boolean;
   satellites?: Satellite[];
 }
 

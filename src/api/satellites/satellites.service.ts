@@ -73,12 +73,10 @@ export class SatelliteService {
     const enginePlanetId = world.getPlanetIdByNumericId(data.planetId);
     
     if (enginePlanetId) {
-      const enginePlanet = world.getPlanet(enginePlanetId) as any;
+      const enginePlanet = world.getPlanet(enginePlanetId);
       
       if (enginePlanet) {
-        if (!enginePlanet.satellites) {
-          enginePlanet.satellites = [];
-        }
+        enginePlanet.satellites ??= [];
         
         enginePlanet.satellites.push({
           id: newSatellite.id,

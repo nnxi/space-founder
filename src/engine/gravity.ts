@@ -10,9 +10,7 @@ export function applyGravity(
   allPlanets: ReadonlyMap<string, Planet>,
   tickIntervalSec: number
 ): void {
-  const target = targetPlanet as any;
-
-  if (target.role === "default") {
+  if (targetPlanet.role === "default") {
     return;
   }
 

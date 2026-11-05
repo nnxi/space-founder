@@ -8,7 +8,6 @@ async function main(): Promise<void> {
   const world = new WorldEngine();
   const planetRepository = new PlanetRepository(getSupabaseClient());
 
-  await planetRepository.bootstrapWorld(world);
   world.setPersistenceAdapter(planetRepository);
 
   const snapshotScheduler = new SnapshotScheduler(planetRepository, world);

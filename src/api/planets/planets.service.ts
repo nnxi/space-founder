@@ -107,21 +107,20 @@ export class PlanetService {
       throw new Error(`Profile update failed: ${profileError.message}`);
     }
 
-    world.hydrate([{
-      numericId: newPlanet.id,
-      planet: {
-        id: data.name.trim(),
-        chunkIndex: chunkIndex,
-        localPosition: localPosition,
-        velocity: { x: vx, y: vy, z: vz },
-        constellationId: Number(data.constellationId || 0),
-        planetType: data.planetType || "rocky",
-        colorHex: data.colorHex || "#ffffff",
-        radius: 1.0,
-        username: currentUsername,
-        role: "user"
-      },
-    }]);
+    world.addPlanet({
+      id: `user_${newPlanet.id}`,
+      name: planetName,
+      userId,
+      chunkIndex: chunkIndex,
+      localPosition: localPosition,
+      velocity: { x: vx, y: vy, z: vz },
+      constellationId: Number(data.constellationId || 0),
+      planetType: data.planetType || "rocky",
+      colorHex: data.colorHex || "#ffffff",
+      radius: 1.0,
+      username: currentUsername,
+      role: "user"
+    }, newPlanet.id);
 
     return { planetId: newPlanet.id };
   }

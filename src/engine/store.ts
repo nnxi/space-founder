@@ -11,18 +11,27 @@ export class PlanetStore {
   
   private readonly grid = new SpatialGrid();
 
+  // 물리 연산 대상(접속 중인 유저 행성) 목록: 틱 루프는 전체 Map 대신 이 Set만 순회
+  private readonly activePlanetIds = new Set<string>();
+
   clear(): void {
     this.planets.clear();
     this.idToNumeric.clear();
     this.numericToId.clear();
+    this.activePlanetIds.clear();
     this.grid.clear();
   }
 
+  activate(planetId: string): void {
+    if (this.planets.has(planetId)) this.activePlanetIds.add(planetId);
+  }
+
+  getActivePlanetIds(): ReadonlySet<string> {
+    return this.activePlanetIds;
+  }
+
   setPlanet(planet: Planet, numericId: number): void {
-    const p = planet as any;
-    if (!p.satellites) {
-      p.satellites = [];
-    }
+    planet.satellites ??= [];
 
     this.planets.set(planet.id, planet);
     this.idToNumeric.set(planet.id, numericId);
@@ -36,6 +45,7 @@ export class PlanetStore {
     if (!planet) return;
 
     this.planets.delete(planetId);
+    this.activePlanetIds.delete(planetId);
     
     const numericId = this.idToNumeric.get(planetId);
     if (numericId !== undefined) {

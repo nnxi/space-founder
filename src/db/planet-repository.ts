@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config";
-import type { WorldEngine, PlanetPersistenceAdapter } from "../engine/world";
-import type { Planet } from "../types/planet";
+import type { HydratablePlanet, PlanetPersistenceAdapter } from "../engine/world";
+import type { Planet, PlanetRole, PlanetType } from "../types/planet";
 
 export interface SatelliteRow {
   id: number;
@@ -21,23 +21,30 @@ export interface UserPlanetRow {
   vy: number;
   vz: number;
   constellation_id: number;
-  planet_type: string;
+  planet_type: PlanetType;
   color_hex: string;
   created_at: string;
   planet_satellites?: SatelliteRow[];
   profiles?: { username: string } | { username: string }[] | null;
-  role: string;
+  role: PlanetRole;
 }
 
 export class PlanetRepository implements PlanetPersistenceAdapter {
   constructor(private readonly supabase: SupabaseClient) {}
 
-  // 초기화 시 유저 행성 데이터만 로드
-  async bootstrapWorld(world: WorldEngine): Promise<void> {
-    const userRows = await this.fetchUserPlanets();
-    const hydratablePlanets = userRows.map((row) => toHydratableUser(row));
+  // 소켓 접속 시 해당 유저의 행성 1개만 조회
+  async loadUserPlanet(userId: string): Promise<HydratablePlanet | null> {
+    const { data, error } = await this.supabase
+      .from("user_planets")
+      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username), role")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    world.hydrate(hydratablePlanets);
+    if (error) {
+      throw new Error(`Failed to fetch user planet: ${error.message}`);
+    }
+
+    return data ? toHydratableUser(data as unknown as UserPlanetRow) : null;
   }
 
   persistPlanet(planet: Planet, numericId: number): void {
@@ -93,19 +100,6 @@ export class PlanetRepository implements PlanetPersistenceAdapter {
       console.error(`[SnapshotScheduler] Network request failed:`, error);
     }
   }
-
-  private async fetchUserPlanets(): Promise<UserPlanetRow[]> {
-    const { data, error } = await this.supabase
-      .from("user_planets")
-      .select("id, user_id, name, x, y, z, vx, vy, vz, constellation_id, planet_type, color_hex, created_at, planet_satellites(id, orbit_radius, orbit_speed, orbit_inclination), profiles:user_id(username), role")
-      .order("id", { ascending: true });
-
-    if (error) {
-      throw new Error(`Failed to fetch user planets: ${error.message}`);
-    }
-
-    return (data ?? []) as UserPlanetRow[];
-  }
 }
 
 function toChunkSpace(x: number, y: number, z: number) {
@@ -146,24 +140,23 @@ function toHydratableUser(row: UserPlanetRow): { numericId: number; planet: Plan
       localPosition,
       velocity: { x: row.vx, y: row.vy, z: row.vz },
       constellationId: row.constellation_id,
-      planetType: row.planet_type as any,
+      planetType: row.planet_type,
       colorHex: row.color_hex,
       radius: 1.0,
       satellites: row.planet_satellites ?? [],
       username,
       role: row.role || "user",
       userId: row.user_id,
-    } as any,
+    },
   };
 }
 
 function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetRow> {
-  const p = planet as any;
   const absPos = toAbsoluteSpace(planet.chunkIndex, planet.localPosition);
 
   const row: Partial<UserPlanetRow> = {
     id: numericId,
-    name: p.name || planet.id,
+    name: planet.name || planet.id,
     x: absPos.x || 0,
     y: absPos.y || 0,
     z: absPos.z || 0,
@@ -171,13 +164,13 @@ function toUserInsertRow(planet: Planet, numericId: number): Partial<UserPlanetR
     vy: planet.velocity?.y || 0,
     vz: planet.velocity?.z || 0,
     constellation_id: planet.constellationId || 0,
-    planet_type: p.planetType || "rocky",
-    color_hex: p.colorHex || "#ffffff",
-    role: p.role || "user",
+    planet_type: planet.planetType || "rocky",
+    color_hex: planet.colorHex || "#ffffff",
+    role: planet.role || "user",
   };
 
-  if (p.userId) {
-    row.user_id = p.userId;
+  if (planet.userId) {
+    row.user_id = planet.userId;
   }
 
   return row;

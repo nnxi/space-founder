@@ -1,11 +1,31 @@
 import type { SectorIndices } from "./sector";
-import type { WarpRequest, WorldEvent, Vec3 } from "./planet";
+import type {
+  PlanetRole,
+  PlanetType,
+  Satellite,
+  Vec3,
+  WarpRequest,
+  WorldEvent,
+} from "./planet";
 
 export interface TrackMeAck {
   ok: boolean;
   error?: string;
   chunkIndex?: SectorIndices;
   localPosition?: Vec3;
+}
+
+export interface StaticPlanetInfo {
+  planetId: number;
+  planetName: string;
+  userType: PlanetRole;
+  username: string;
+  colorHex: string;
+  planetType: PlanetType;
+  constellationId: number;
+  satellites: Satellite[];
+  chunkIndex: SectorIndices;
+  localPosition: Vec3;
 }
 
 export interface ClientToServerEvents {
@@ -42,16 +62,7 @@ export interface ServerToClientEvents {
   "sector:joined": (payload: {
     room: string;
     sector: SectorIndices;
-    staticPlanets: {
-      planetId: number;
-      planetName: string;
-      userType: string;
-      username: string;
-      colorHex: string;
-      planetType: string;
-      constellationId: number;
-      satellites: any[];
-    }[];
+    staticPlanets: StaticPlanetInfo[];
   }) => void;
   "world:update": (payload: Buffer) => void;
   "world:event": (payload: WorldEvent) => void;
