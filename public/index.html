@@ -9,6 +9,7 @@
     <link rel="icon" href="TemplateData/favicon-dark.svg" media="(prefers-color-scheme: dark)">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   </head>
   <body>
     <div id="unity-container">
@@ -102,6 +103,7 @@
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
         }).then((unityInstance) => {
+          window.unityInstance = unityInstance;
           loadingBar.style.display = "none";
         }).catch((message) => {
           alert(message);
