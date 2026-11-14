@@ -25,7 +25,20 @@
     <script>
       window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.register("ServiceWorker.js");
+          // 기존에 등록된 모든 서비스 워커 강제 해제
+          navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            for (let registration of registrations) {
+              registration.unregister();
+            }
+          });
+        }
+        // 브라우저 Cache Storage 비우기
+        if ("caches" in window) {
+          caches.keys().then(function (names) {
+            for (let name of names) {
+              caches.delete(name);
+            }
+          });
         }
       });
 
@@ -54,12 +67,12 @@
       }
 
       var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/public.loader.js";
+      var loaderUrl = buildUrl + "/48d668e9b00510f1a2d2b55b744ce74b.loader.js";
       var config = {
         arguments: [],
-        dataUrl: buildUrl + "/public.data",
-        frameworkUrl: buildUrl + "/public.framework.js",
-        codeUrl: buildUrl + "/public.wasm",
+        dataUrl: buildUrl + "/5cf0105e36a3631eb18ff1930f4182f2.data",
+        frameworkUrl: buildUrl + "/65cc4ee5397df976eca00fb16a925d16.framework.js",
+        codeUrl: buildUrl + "/e2b679e3b0a680ccc5c3bacb64e78b71.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "SpaceFounder",
